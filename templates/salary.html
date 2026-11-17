@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}薪资合同 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div id="serverSearchScope" data-search-scope="all-contracts" hidden></div>
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h1 class="h3 mb-1">薪资帽与合同管理</h1>
+        <div class="text-secondary small">球队薪资空间、奢侈税压力与合同选项</div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">工资帽</div>
+                <div class="h4 mb-0">${{ "{:,}".format(cap.cap_amount) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">奢侈税线</div>
+                <div class="h4 mb-0">${{ "{:,}".format(cap.luxury_tax_line) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">薪资帽内球队</div>
+                <div class="h4 mb-0">{{ teams | selectattr('over_cap', 'equalto', 0) | list | length }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">奢侈税球队</div>
+                <div class="h4 mb-0">{{ teams | selectattr('luxury_tax', 'greaterthan', 0) | list | length }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="mb-5">
+    <h2 class="h5 mb-3">球队薪资空间</h2>
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th scope="col">球队</th>
+                        <th scope="col">总薪资</th>
+                        <th scope="col">剩余空间</th>
+                        <th scope="col">超帽金额</th>
+                        <th scope="col">预计奢侈税</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for team in teams %}
+                    <tr>
+                        <td class="fw-semibold text-nowrap">{{ team.name }} ({{ team.abbreviation }})</td>
+                        <td>${{ "{:,}".format(team.payroll) }}</td>
+                        <td class="text-success">${{ "{:,}".format(team.cap_space) }}</td>
+                        <td class="{{ 'text-danger' if team.over_cap else 'text-muted' }}">${{ "{:,}".format(team.over_cap) }}</td>
+                        <td class="{{ 'text-danger' if team.luxury_tax else 'text-muted' }}">${{ "{:,}".format(team.luxury_tax) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <h2 class="h5 mb-3">合同明细</h2>
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span class="small text-secondary">
+                    {% if search %}
+                        在全部合同中搜索“{{ search }}”，共找到 {{ total }} 条
+                    {% else %}
+                        按年薪降序展示全部合同，共 {{ total }} 条
+                    {% endif %}
+                </span>
+                {% if search %}
+                <a href="{{ url_for('salary', season=request.args.get('season', ''), per_page=per_page) }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x-lg me-1"></i>清除搜索
+                </a>
+                {% endif %}
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>球员</th>
+                            <th>球队</th>
+                            <th>合同类型</th>
+                            <th>年限</th>
+                            <th>首年年薪</th>
+                            <th>状态</th>
+                            <th>选项</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contract in contracts %}
+                        <tr>
+                            <td class="fw-semibold text-nowrap">{{ contract.player_name }}</td>
+                            <td>{{ contract.team_name }}</td>
+                            <td>{{ contract.contract_type }}</td>
+                            <td>{{ contract.start_year }} - {{ contract.end_year }}</td>
+                            <td>${{ "{:,}".format(contract.annual_salary) }}
+                                {% if contract.annual_increase_pct %}<div class="small text-secondary">每年增加首年年薪的 {{ (contract.annual_increase_pct * 100) | round(2) }}%</div>{% endif %}
+                            </td>
+                            <td>{{ {"Active": "有效", "Waived": "已裁撤"}.get(contract.status, contract.status) }}</td>
+                            <td>
+                                {% if contract.player_option %}<span class="badge text-bg-warning">PO</span>{% endif %}
+                                {% if contract.team_option %}<span class="badge text-bg-info">TO</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% include "_pagination.html" %}
+    </div>
+    <div class="col-lg-4">
+        <h2 class="h5 mb-3">交易模拟器</h2>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <p class="text-secondary small">按 25% 薪资匹配规则快速检查两笔合同的匹配度。</p>
+                <div class="mb-3">
+                    <label for="trade-a" class="form-label">送出球员</label>
+                    <select class="form-select" id="trade-a" onchange="updateTradeCheck()">
+                        <option value="">请选择</option>
+                        {% for contract in trade_contracts %}
+                        <option value="{{ contract.player_id }}" data-salary="{{ contract.annual_salary }}">{{ contract.player_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="trade-b" class="form-label">接收球员</label>
+                    <select class="form-select" id="trade-b" onchange="updateTradeCheck()">
+                        <option value="">请选择</option>
+                        {% for contract in trade_contracts %}
+                        <option value="{{ contract.player_id }}" data-salary="{{ contract.annual_salary }}">{{ contract.player_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="trade-result" class="alert alert-secondary mb-0">选择两名球员后显示结果。</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateTradeCheck() {
+    const a = document.getElementById("trade-a");
+    const b = document.getElementById("trade-b");
+    const result = document.getElementById("trade-result");
+    if (!a.value || !b.value) {
+        result.className = "alert alert-secondary mb-0";
+        result.textContent = "选择两名球员后显示结果。";
+        return;
+    }
+    const salaryA = Number(a.options[a.selectedIndex].dataset.salary);
+    const salaryB = Number(b.options[b.selectedIndex].dataset.salary);
+    const diff = Math.abs(salaryA - salaryB);
+    const rate = Math.max(salaryA, salaryB) === 0 ? 0 : diff / Math.max(salaryA, salaryB) * 100;
+    const valid = rate <= 25;
+    result.className = "alert mb-0 " + (valid ? "alert-success" : "alert-danger");
+    result.textContent = "薪资差额 " + rate.toFixed(1) + "%，" + (valid ? "符合 25% 匹配规则" : "超出 25% 匹配规则");
+}
+</script>
+{% endblock %}

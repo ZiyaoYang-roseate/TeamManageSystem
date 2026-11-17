@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}联赛运营台 · NBA Data Hub{% endblock %}
+
+{% block content %}
+<header class="d-flex flex-wrap align-items-end justify-content-between gap-3 border-bottom pb-3 mb-4">
+    <div>
+        <div class="text-secondary small mb-1">{{ season }} 赛季</div>
+        <h1 class="h3 mb-2">联赛运营台</h1>
+        <div class="text-secondary small">
+            当前比赛日 {{ overview.business_date or '未设置' }}
+            {% if overview.next_date %} · 下一比赛日 {{ overview.next_date }}{% endif %}
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('teams', season=season) }}">球队档案</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('players', season=season) }}">球员档案</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('games', season=season) }}">全联盟赛程</a>
+    </div>
+</header>
+
+<div class="row row-cols-2 row-cols-xl-4 g-3 mb-4" aria-label="联赛运营概况">
+    <div class="col"><a class="card card-body h-100 text-decoration-none" href="#league-live">
+        <span class="text-secondary small">进行中</span><strong class="h3 mb-0 mt-1">{{ overview.live_count }}</strong>
+    </a></div>
+    <div class="col"><a class="card card-body h-100 text-decoration-none" href="#league-starters">
+        <span class="text-secondary small">首发待齐备</span><strong class="h3 mb-0 mt-1">{{ overview.lineup_count }}</strong>
+    </a></div>
+    <div class="col"><a class="card card-body h-100 text-decoration-none" href="#league-reviews">
+        <span class="text-secondary small">完赛未生成复盘</span><strong class="h3 mb-0 mt-1">{{ overview.missing_report_count }}</strong>
+    </a></div>
+    <div class="col"><a class="card card-body h-100 text-decoration-none" href="#league-clock">
+        <span class="text-secondary small">完赛时钟待核查</span><strong class="h3 mb-0 mt-1">{{ overview.clock_flag_count }}</strong>
+    </a></div>
+</div>
+
+<div class="row g-3 mb-4">
+    <section class="col-xl-7" id="league-starters" aria-labelledby="league-starters-title">
+        <div class="card h-100">
+            <div class="card-header bg-transparent py-3">
+                <h2 class="h6 mb-1" id="league-starters-title">首发待办</h2>
+                <p class="small text-secondary mb-0">覆盖进行中待补交的比赛、当前及下一比赛日。</p>
+            </div>
+            {% if overview.lineup %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th scope="col">比赛</th><th scope="col">主队提交</th><th scope="col">客队提交</th><th scope="col" class="text-end">处理</th></tr></thead>
+                    <tbody>
+                    {% for game in overview.lineup %}
+                        <tr>
+                            <th scope="row" class="text-nowrap">
+                                {{ game.home_abbr }} vs {{ game.away_abbr }}
+                                <div class="text-secondary small fw-normal">{{ game.game_date }}{% if game.status == 'live' %} · 进行中{% endif %}</div>
+                            </th>
+                            <td class="{{ 'text-success-emphasis' if game.home_starters == 5 else 'text-warning-emphasis' }}">{{ game.home_starters }}/5</td>
+                            <td class="{{ 'text-success-emphasis' if game.away_starters == 5 else 'text-warning-emphasis' }}">{{ game.away_starters }}/5</td>
+                            <td class="text-end text-nowrap">
+                                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='scout', team=game.home_team_id if game.home_starters != 5 else game.away_team_id) }}#starting-lineups">查看首发</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="card-body text-secondary mb-0">当前没有首发待办。</p>
+            {% endif %}
+        </div>
+    </section>
+    <section class="col-xl-5" id="league-live" aria-labelledby="league-live-title">
+        <div class="card h-100">
+            <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="league-live-title">进行中的比赛</h2></div>
+            {% if overview.live %}
+            <ul class="list-group list-group-flush">
+                {% for game in overview.live %}
+                <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+                    <div>
+                        <div class="fw-semibold">{{ game.home_abbr }} {{ game.home_score }} : {{ game.away_score }} {{ game.away_abbr }}</div>
+                        <div class="text-secondary small">{{ game.game_date }} · 第 {{ game.period }} 节 · {{ '%d:%02d'|format(game.seconds_remaining // 60, game.seconds_remaining % 60) }}</div>
+                    </div>
+                    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('game_detail', game_id=game.id) }}">查看比赛</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="card-body text-secondary mb-0">当前没有进行中的比赛。</p>
+            {% endif %}
+        </div>
+    </section>
+</div>
+
+<div class="row g-3 mb-4">
+    <section class="col-xl-7" id="league-reviews" aria-labelledby="league-reviews-title">
+        <div class="card h-100">
+            <div class="card-header bg-transparent py-3">
+                <h2 class="h6 mb-1" id="league-reviews-title">复盘待办</h2>
+                <p class="small text-secondary mb-0">展示最近 6 场已完赛但尚未生成复盘的比赛。</p>
+            </div>
+            {% if overview.missing_reports %}
+            <ul class="list-group list-group-flush">
+                {% for game in overview.missing_reports %}
+                <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div><strong>{{ game.home_abbr }} {{ game.home_score }} : {{ game.away_score }} {{ game.away_abbr }}</strong><div class="small text-secondary">{{ game.game_date }}</div></div>
+                    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='review') }}">打开赛后复盘</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="card-body text-secondary mb-0">当前没有复盘待办。</p>
+            {% endif %}
+        </div>
+    </section>
+    <section class="col-xl-5" id="league-clock" aria-labelledby="league-clock-title">
+        <div class="card h-100">
+            <div class="card-header bg-transparent py-3">
+                <h2 class="h6 mb-1" id="league-clock-title">完赛时钟待核查</h2>
+                <p class="small text-secondary mb-0">记录已标为完赛，但节次不足或时钟未归零。</p>
+                {% if overview.missing_clock_count %}
+                <p class="small text-secondary mb-0">另有 {{ overview.missing_clock_count }} 场历史比赛有第四节记录，摘要时钟仍是初始值。</p>
+                {% endif %}
+            </div>
+            {% if overview.clock_flags %}
+            <ul class="list-group list-group-flush">
+                {% for game in overview.clock_flags %}
+                <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div><strong>{{ game.home_abbr }} vs {{ game.away_abbr }}</strong><div class="small text-secondary">第 {{ game.period }} 节 · 剩余 {{ '%d:%02d'|format(game.seconds_remaining // 60, game.seconds_remaining % 60) }}</div></div>
+                    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('play_by_play', game_id=game.id) }}">核对比赛记录</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="card-body text-secondary mb-0">当前没有待核查的完赛时钟。</p>
+            {% endif %}
+        </div>
+    </section>
+</div>
+
+<section class="border-top pt-3" aria-labelledby="league-accounts">
+    <h2 class="h6" id="league-accounts">球队账号覆盖</h2>
+    <p class="text-secondary small mb-1">{{ overview.teams_count - (overview.unassigned | length) }} / {{ overview.teams_count }} 支球队已配置管理层账号。</p>
+    {% if overview.unassigned %}
+    <div class="d-flex flex-wrap gap-2">
+        {% for team in overview.unassigned %}<a href="{{ url_for('team_detail', team_id=team.id) }}">{{ team.name }}</a>{% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

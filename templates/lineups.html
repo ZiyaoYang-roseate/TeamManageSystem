@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}阵容组合 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h1 class="h3 mb-1">阵容组合与净效率</h1>
+        <div class="text-secondary small">双人组、三人组与五人组的协同效应</div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">最佳五人组</div>
+                {% if best_five %}
+                <div class="h5 mb-1">{{ best_five.team_name }}</div>
+                <div class="small text-muted mb-2">{{ best_five.player_names }}</div>
+                <div class="fw-semibold text-success">Net {{ best_five.net_rating }}</div>
+                {% else %}<div class="text-muted py-3">暂无数据</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">最低效五人组</div>
+                {% if worst_five %}
+                <div class="h5 mb-1">{{ worst_five.team_name }}</div>
+                <div class="small text-muted mb-2">{{ worst_five.player_names }}</div>
+                <div class="fw-semibold text-danger">Net {{ worst_five.net_rating }}</div>
+                {% else %}<div class="text-muted py-3">暂无数据</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">最佳三人组</div>
+                {% if best_three %}
+                <div class="h5 mb-1">{{ best_three.team_name }}</div>
+                <div class="small text-muted mb-2">{{ best_three.player_names }}</div>
+                <div class="fw-semibold text-success">Net {{ best_three.net_rating }}</div>
+                {% else %}<div class="text-muted py-3">暂无数据</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">最佳双人组</div>
+                {% if best_two %}
+                <div class="h5 mb-1">{{ best_two.team_name }}</div>
+                <div class="small text-muted mb-2">{{ best_two.player_names }}</div>
+                <div class="fw-semibold text-success">Net {{ best_two.net_rating }}</div>
+                {% else %}<div class="text-muted py-3">暂无数据</div>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">球队</th>
+                    <th scope="col">组合</th>
+                    <th scope="col">球员</th>
+                    <th scope="col">时间</th>
+                    <th scope="col">回合数</th>
+                    <th scope="col">进攻效率</th>
+                    <th scope="col">防守效率</th>
+                    <th scope="col">净效率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lineup in lineups %}
+                <tr>
+                    <td class="text-nowrap">{{ lineup.team_name }} ({{ lineup.abbreviation }})</td>
+                    <td>
+                        {% if lineup.combination_size == 5 %}五人组{% elif lineup.combination_size == 3 %}三人组{% else %}双人组{% endif %}
+                    </td>
+                    <td class="small">{{ lineup.player_names }}</td>
+                    <td>{{ lineup.minutes_played }}</td>
+                    <td>{{ lineup.possessions }}</td>
+                    <td>{{ lineup.off_rating }}</td>
+                    <td>{{ lineup.def_rating }}</td>
+                    <td class="fw-semibold {{ 'text-success' if lineup.net_rating > 0 else 'text-danger' }}">{{ lineup.net_rating }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-5">暂无阵容数据</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "_pagination.html" %}
+{% endblock %}

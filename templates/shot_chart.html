@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}投篮热区 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+{% set total_made = zones | map(attribute='made') | sum %}
+{% set total_attempts = zones | map(attribute='attempts') | sum %}
+
+<div class="page-heading mb-4">
+    <h1 class="h3 mb-1">投篮热区分析</h1>
+    <div class="text-secondary small">半场鸟瞰视角，6 个精准热区覆盖标准 NBA 球场</div>
+</div>
+
+<form class="row g-3 align-items-end mb-4" method="get">
+    <div class="col-md-5">
+        <label for="player_id" class="form-label">选择球员</label>
+        <select class="form-select" id="player_id" name="player_id" onchange="this.form.submit()">
+            {% for player in players %}
+            <option value="{{ player.id }}" {% if selected and player.id == selected.id %}selected{% endif %}>
+                {{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm shot-card">
+            <div class="shot-header">
+                <div>
+                    <div class="fw-semibold">{{ selected.name if selected else "未选择球员" }}</div>
+                    {% if selected %}
+                    <div class="text-secondary small">{{ selected.team_name }} ({{ selected.abbreviation }})</div>
+                    {% endif %}
+                </div>
+                <div class="text-end">
+                    <div class="small text-secondary">命中数 / 出手数 · 命中</div>
+                    <div class="fw-semibold">
+                        {{ total_made }}/{{ total_attempts }}
+                        ·
+                        {{ ((total_made / total_attempts) * 100) | round(1) if total_attempts else "0.0" }}%
+                    </div>
+                </div>
+            </div>
+
+            <div class="court-map">
+                <svg viewBox="0 0 500 470" role="img" aria-label="半场投篮热区图">
+                    <rect x="0" y="0" width="500" height="470" class="court-wood"></rect>
+
+                    <line x1="0" y1="0" x2="500" y2="0" class="court-line"></line>
+                    <line x1="0" y1="430" x2="500" y2="430" class="court-line"></line>
+                    <rect x="0" y="0" width="500" height="430" class="court-line"></rect>
+                    <circle cx="250" cy="0" r="56" class="court-line"></circle>
+
+                    <line x1="170" y1="240" x2="330" y2="240" class="court-line"></line>
+                    <rect x="170" y="240" width="160" height="190" class="court-line"></rect>
+                    <path d="M 170,240 A 60,60 0 0,1 330,240" class="court-line court-dashed"></path>
+
+                    <path d="M 30,290 A 237.5,237.5 0 0,1 470,290" class="court-line"></path>
+                    <line x1="30" y1="290" x2="30" y2="430" class="court-line"></line>
+                    <line x1="470" y1="290" x2="470" y2="430" class="court-line"></line>
+                    <circle cx="250" cy="390" r="7.5" class="court-line"></circle>
+                    <line x1="230" y1="390" x2="270" y2="390" class="court-line"></line>
+
+                    {% for zone in zones | reverse %}
+                    <path class="shot-zone"
+                          d="{{ zone.path }}"
+                          fill="{{ zone.color }}" fill-opacity="0.72"
+                          stroke="#ffffff" stroke-opacity="0.45" stroke-width="1"
+                          data-zone="{{ zone.zone }}"
+                          data-made="{{ zone.made }}"
+                          data-attempts="{{ zone.attempts }}"
+                          data-pct="{{ "%.1f"|format(zone.player_pct) }}"
+                          data-diff="{{ "%+.1f"|format(zone.diff) }}">
+                        <title>{{ zone.zone }}：{{ "%.1f"|format(zone.player_pct) }}% {{ zone.made }}/{{ zone.attempts }}</title>
+                    </path>
+                    {% endfor %}
+
+                    {% for zone in zones %}
+                    <text x="{{ zone.text_x }}" y="{{ zone.text_y }}" text-anchor="middle" class="shot-label">
+                        {{ "%.1f"|format(zone.player_pct) }}%
+                    </text>
+                    <text x="{{ zone.text_x }}" y="{{ zone.text_y + zone.text_dy }}" text-anchor="middle" class="shot-data">
+                        {{ zone.made }}/{{ zone.attempts }}
+                    </text>
+                    {% endfor %}
+                </svg>
+                <div class="shot-tooltip" id="shotTooltip"></div>
+            </div>
+
+            <div class="shot-legend">
+                <span><i class="legend-dot" style="background:#FF5722;"></i>高于平均</span>
+                <span><i class="legend-dot" style="background:#FFEB3B;"></i>处于平均</span>
+                <span><i class="legend-dot" style="background:#2196F3;"></i>低于平均</span>
+                <span><i class="legend-dot" style="background:#49545f;"></i>无出手</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>区域</th>
+                            <th>出手</th>
+                            <th>命中</th>
+                            <th>命中率</th>
+                            <th>联盟平均</th>
+                            <th>差值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for zone in zones %}
+                        <tr>
+                            <td>{{ zone.zone }}</td>
+                            <td>{{ zone.attempts }}</td>
+                            <td>{{ zone.made }}</td>
+                            <td>{{ "%.1f"|format(zone.player_pct) }}%</td>
+                            <td>{{ "%.1f"|format(zone.league_pct) }}%</td>
+                            <td class="{{ 'text-warning' if zone.diff > 0 else 'text-primary' }}">{{ "%+.1f"|format(zone.diff) }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .shot-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--card-border);
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .court-map {
+        position: relative;
+        padding: 16px;
+    }
+
+    .court-map svg {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 8px;
+        background-color: #c58b4a;
+        background-image:
+            repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 46px),
+            repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 1px, transparent 1px 128px),
+            linear-gradient(120deg, #d5a25d, #a86e32);
+    }
+
+    .court-wood {
+        fill: transparent;
+    }
+
+    .court-line {
+        fill: none;
+        stroke: #5a3a1d;
+        stroke-width: 2;
+        vector-effect: non-scaling-stroke;
+    }
+
+    .court-dashed {
+        stroke-dasharray: 4;
+    }
+
+    .shot-zone:hover {
+        fill-opacity: 0.9;
+        stroke: #ffffff;
+        stroke-width: 3px;
+        cursor: pointer;
+    }
+
+    .shot-tooltip {
+        position: absolute;
+        z-index: 20;
+        display: none;
+        pointer-events: none;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgba(10, 14, 18, 0.92);
+        border: 1px solid #33404d;
+        color: #fff;
+        font-size: 13px;
+        min-width: 190px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    }
+
+    .shot-tooltip .tooltip-title {
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    .shot-tooltip .tooltip-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .shot-label,
+    .shot-data {
+        fill: #fff;
+        font-weight: 700;
+        paint-order: stroke;
+        stroke: rgba(0, 0, 0, 0.42);
+        stroke-width: 2px;
+    }
+
+    .shot-label {
+        font-size: 10px;
+    }
+
+    .shot-data {
+        font-size: 9px;
+        font-weight: 600;
+    }
+
+    .shot-legend {
+        display: flex;
+        justify-content: center;
+        gap: 22px;
+        padding: 14px;
+        border-top: 1px solid var(--card-border);
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .legend-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+</style>
+
+<script>
+    const shotTooltip = document.getElementById("shotTooltip");
+    const courtMap = document.querySelector(".court-map");
+
+    document.querySelectorAll(".shot-zone").forEach((zone) => {
+        zone.addEventListener("mouseenter", (event) => {
+            shotTooltip.innerHTML = `
+                <div class="tooltip-title">${zone.dataset.zone}</div>
+                <div class="tooltip-row"><span>命中率</span><strong>${zone.dataset.pct}%</strong></div>
+                <div class="tooltip-row"><span>命中/出手</span><strong>${zone.dataset.made}/${zone.dataset.attempts}</strong></div>
+                <div class="tooltip-row"><span>对比联盟</span><strong>${zone.dataset.diff}%</strong></div>
+            `;
+            shotTooltip.style.display = "block";
+        });
+
+        zone.addEventListener("mousemove", (event) => {
+            const rect = courtMap.getBoundingClientRect();
+            shotTooltip.style.left = Math.min(event.clientX - rect.left + 12, rect.width - 210) + "px";
+            shotTooltip.style.top = Math.max(event.clientY - rect.top - 12, 0) + "px";
+        });
+
+        zone.addEventListener("mouseleave", () => {
+            shotTooltip.style.display = "none";
+        });
+    });
+</script>
+{% endblock %}

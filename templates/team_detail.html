@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4 team-banner">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="team-mark">{{ team.abbreviation }}</div>
+                    <div>
+                        <h1 class="h3 mb-1">{{ team.city }} {{ team.name }}</h1>
+                        <div class="text-secondary">
+                            {{ team.arena }} · 主教练：{{ coach.name if coach else "-" }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="text-end">
+                <div class="h5 mb-0">
+                    {% if standings %}
+                    {{ standings.wins }}胜-{{ standings.games_played - standings.wins }}负
+                    {% else %}0胜-0负{% endif %}
+                </div>
+                {% if can_edit_team(team.id) %}
+                <a href="{{ url_for('edit_team', team_id=team.id) }}" class="btn btn-outline-primary btn-sm mt-2">
+                    <i class="bi bi-pencil me-1"></i>修改球队信息
+                </a>
+                {% endif %}
+                {% if current_user.role == ROLE_LEAGUE_ADMIN %}
+                <form method="post" action="{{ url_for('delete_team', team_id=team.id) }}" class="d-inline"
+                      onsubmit="return confirm('确定删除球队及关联比赛、合同和交易记录吗？');">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm mt-2">删除球队</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-4" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#rosterTab" type="button" role="tab">阵容列表</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#capTab" type="button" role="tab">薪资与合同</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#scheduleTab" type="button" role="tab">近期赛程</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#statsTab" type="button" role="tab">团队数据</button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="rosterTab" role="tabpanel">
+        <div class="card shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>号码</th>
+                            <th>姓名</th>
+                            <th>位置</th>
+                            <th>年龄</th>
+                            <th>场均得分</th>
+                            <th>场均篮板</th>
+                            <th>场均助攻</th>
+                            <th>本赛季薪资</th>
+                            <th>合同年限</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for player in roster %}
+                        <tr>
+                            <td>{{ player.jersey_number }}</td>
+                            <td class="fw-semibold text-nowrap">{{ player.name }}</td>
+                            <td>{{ player.position }}</td>
+                            <td>{{ player.age }}</td>
+                            <td>{{ player.ppg or "-" }}</td>
+                            <td>{{ player.rpg or "-" }}</td>
+                            <td>{{ player.apg or "-" }}</td>
+                            <td>${{ "{:,}".format(player.contract_salary or player.salary or 0) }}</td>
+                            <td>
+                                {% if player.start_year and player.end_year %}
+                                {{ player.start_year }} - {{ player.end_year }}
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">暂无球员</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="capTab" role="tabpanel">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <h2 class="h6 mb-3">薪资空间</h2>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-secondary">当前总薪资</span>
+                            <strong>${{ "{:,}".format(payroll) }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-secondary">工资帽</span>
+                            <strong>${{ "{:,}".format(cap.cap_amount if cap else 0) }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-4">
+                            <span class="text-secondary">剩余空间</span>
+                            <strong class="{{ 'text-danger' if cap_space < 0 else 'text-success' }}">${{ "{:,}".format(cap_space) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 12px;">
+                            <div class="progress-bar {{ 'bg-danger' if cap_space < 0 else 'bg-success' }}"
+                                 role="progressbar"
+                                 style="width: {{ ((payroll / cap.cap_amount) * 100) | round(1) if cap and cap.cap_amount else 0 }}%;"></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <h2 class="h6 mb-3">特例与奢侈税</h2>
+                        <div class="text-secondary small">奢侈税线</div>
+                        <div class="fw-semibold mb-3">${{ "{:,}".format(cap.luxury_tax_line if cap else 0) }}</div>
+                        <div class="text-secondary small">第二土豪线</div>
+                        <div class="fw-semibold mb-3">${{ "{:,}".format(cap.second_apron if cap else 0) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-xl-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                        <h2 class="h6 mb-0">自由球员签约记录</h2>
+                        <span class="badge text-bg-primary">{{ signing_history | length }}</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>球员</th>
+                                    <th>合同</th>
+                                    <th>年薪</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for signing in signing_history %}
+                                <tr>
+                                    <td class="text-nowrap">{{ signing.signed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td class="text-nowrap">
+                                        <div class="fw-semibold">{{ signing.player_name }}</div>
+                                        <div class="small text-secondary">#{{ signing.jersey_number }} · {{ signing.season }}</div>
+                                    </td>
+                                    <td class="text-nowrap">{{ signing.contract_years }} 年</td>
+                                    <td class="text-nowrap">${{ "{:,}".format(signing.annual_salary) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">暂无自由球员签约记录</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                        <h2 class="h6 mb-0">球员交易记录</h2>
+                        <span class="badge text-bg-primary">{{ trade_history | length }}</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>时间 / 对方球队</th>
+                                    <th>送出</th>
+                                    <th>得到</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trade in trade_history %}
+                                <tr>
+                                    <td class="text-nowrap">
+                                        <div>{{ trade.trade_date.strftime('%Y-%m-%d %H:%M') }}</div>
+                                        <div class="small text-secondary">
+                                            {{ trade.opponent_name }} ({{ trade.opponent_abbreviation }})
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% for player_name in trade.sent_players %}
+                                        <span class="badge text-bg-danger me-1 mb-1">{{ player_name }}</span>
+                                        {% else %}<span class="text-muted">—</span>{% endfor %}
+                                    </td>
+                                    <td>
+                                        {% for player_name in trade.received_players %}
+                                        <span class="badge text-bg-success me-1 mb-1">{{ player_name }}</span>
+                                        {% else %}<span class="text-muted">—</span>{% endfor %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">暂无球员交易记录</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="scheduleTab" role="tabpanel">
+        <div class="card shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>主队</th>
+                            <th>客队</th>
+                            <th>比分</th>
+                            <th>状态</th>
+                            <th>胜者</th>
+                            <th class="text-end">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for game in recent_games %}
+                        <tr>
+                            <td>{{ game.game_date }}</td>
+                        <td>{{ game.home_team_name }}</td>
+                        <td>{{ game.away_team_name }}</td>
+                        <td class="fw-semibold">{{ game.home_score }} : {{ game.away_score }}</td>
+                        <td>
+                            {% if game.status == 'live' %}
+                            <span class="badge text-bg-success">进行中</span>
+                            {% elif game.status == 'scheduled' %}
+                            <span class="badge text-bg-warning">待开始</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">已结束</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if game.status != 'finished' %}
+                            -
+                            {% elif game.home_score > game.away_score %}
+                            {{ game.home_team_name }}
+                            {% else %}
+                            {{ game.away_team_name }}
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-nowrap">
+                            <a href="{{ url_for('game_detail', game_id=game.id) }}" class="btn btn-sm btn-outline-primary">技术统计</a>
+                            {% if current_user and current_user.role == ROLE_SCOREKEEPER %}
+                            <a href="{{ url_for('scorekeeper_game', game_id=game.id) }}" class="btn btn-sm btn-outline-success ms-1">计分面板</a>
+                            {% endif %}
+                        </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">暂无比赛</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="statsTab" role="tabpanel">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="text-secondary small">场均得分</div>
+                        <div class="h3">{{ ((standings.points_for / standings.games_played) | round(1)) if standings and standings.games_played else "-" }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="text-secondary small">场均失分</div>
+                        <div class="h3">{{ ((standings.points_against / standings.games_played) | round(1)) if standings and standings.games_played else "-" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .team-banner {
+        border-left: 5px solid var(--accent);
+    }
+    .team-mark {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}

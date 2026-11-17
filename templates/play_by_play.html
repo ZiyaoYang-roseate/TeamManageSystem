@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}逐回合日志 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h1 class="h3 mb-1">
+            {{ game.home_team_name }} {{ game.home_score }} : {{ game.away_score }} {{ game.away_team_name }}
+        </h1>
+        <div class="text-secondary small">{{ game.game_date }} · 逐回合事件流</div>
+    </div>
+    <a href="{{ url_for('game_detail', game_id=game.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>返回技术统计
+    </a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <canvas id="gameFlow" height="90"></canvas>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <canvas id="winProbability" height="90"></canvas>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive" style="max-height: 620px; overflow-y: auto;">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark sticky-top">
+                <tr>
+                    <th>时间</th>
+                    <th>球队</th>
+                    <th>事件</th>
+                    <th>比分</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr id="event-{{ event.id }}">
+                    <td class="text-nowrap">
+                        Q{{ event.period }} {{ (event.seconds_remaining // 60) }}:{{ "%02d" | format(event.seconds_remaining % 60) }}
+                    </td>
+                    <td>{{ event.team_abbr }}</td>
+                    <td>{{ event.description }}{% if event.voided_at %}<div class="small text-warning-emphasis">已撤销 · {{ event.correction_reason }} · {{ event.voided_at }}</div>{% endif %}</td>
+                    <td class="fw-semibold">{% if event.voided_at %}—{% else %}{{ event.score_home }} : {{ event.score_away }}{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-5">暂无事件记录</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+{% set valid_events = events | rejectattr('voided_at') | list %}
+const periods = {{ valid_events | map(attribute='period') | list | tojson }};
+const seconds = {{ valid_events | map(attribute='seconds_remaining') | list | tojson }};
+const homeScores = {{ valid_events | map(attribute='score_home') | list | tojson }};
+const awayScores = {{ valid_events | map(attribute='score_away') | list | tojson }};
+const labels = periods.map((period, index) => {
+    const minutes = Math.floor(seconds[index] / 60);
+    const remainingSeconds = String(seconds[index] % 60).padStart(2, "0");
+    return "Q" + period + " " + minutes + ":" + remainingSeconds;
+});
+
+new Chart(document.getElementById("gameFlow"), {
+    type: "line",
+    data: {
+        labels: labels,
+        datasets: [
+            {
+                label: "{{ game.home_team_abbr }}",
+                data: homeScores,
+                borderColor: "#0d6efd",
+                backgroundColor: "rgba(13, 110, 253, 0.12)",
+                fill: true,
+                tension: 0.2
+            },
+            {
+                label: "{{ game.away_team_abbr }}",
+                data: awayScores,
+                borderColor: "#dc3545",
+                backgroundColor: "rgba(220, 53, 69, 0.12)",
+                fill: true,
+                tension: 0.2
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+            x: { ticks: { maxTicksLimit: 12 } },
+            y: { beginAtZero: false }
+        }
+    }
+});
+
+const homeWinProbability = homeScores.map((_, index) => {
+    const diff = homeScores[index] - awayScores[index];
+    return Math.round(1 / (1 + Math.exp(-diff / 8)) * 100);
+});
+
+new Chart(document.getElementById("winProbability"), {
+    type: "line",
+    data: {
+        labels: labels,
+        datasets: [{
+            label: "{{ game.home_team_abbr }} 胜率",
+            data: homeWinProbability,
+            borderColor: "#0d6efd",
+            backgroundColor: "rgba(13, 110, 253, 0.14)",
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: {
+        responsive: true,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+            x: { ticks: { maxTicksLimit: 12 } },
+            y: { min: 0, max: 100, ticks: { callback: value => value + "%" } }
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}比赛详情 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h1 class="h3 mb-1">
+            {{ game.home_team_name }} {{ game.home_score }} : {{ game.away_score }} {{ game.away_team_name }}
+        </h1>
+        <div class="text-secondary small">{{ game.game_date }} · {{ game.season }} 赛季</div>
+    </div>
+    <div class="d-flex gap-2">
+        {% if current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+        {% if can_edit_team(game.home_team_id) or can_edit_team(game.away_team_id) %}
+        <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='scout') }}" class="btn btn-outline-primary">
+            <i class="bi bi-journal-text me-1"></i>赛前分析
+        </a>
+        {% endif %}
+        {% if game.status == 'finished' %}
+        <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='review') }}" class="btn btn-outline-primary">赛后复盘</a>
+        {% endif %}
+        {% endif %}
+        <a href="{{ url_for('play_by_play', game_id=game.id) }}" class="btn btn-primary">
+            <i class="bi bi-graph-up me-1"></i>逐回合日志
+        </a>
+        <a href="{{ url_for('games') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>返回比赛列表
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm" id="box-score">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">球员</th>
+                    <th scope="col">球队</th>
+                    <th scope="col">位置</th>
+                    <th scope="col">时间</th>
+                    <th scope="col">得分</th>
+                    <th scope="col">篮板</th>
+                    <th scope="col">助攻</th>
+                    <th scope="col">抢断</th>
+                    <th scope="col">盖帽</th>
+                    <th scope="col">失误</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in stats %}
+                <tr id="stat-{{ stat.id }}">
+                    <td class="fw-semibold text-nowrap">{{ stat.player_name }}</td>
+                    <td>{{ stat.team_abbr }}</td>
+                    <td>{{ stat.position }}</td>
+                    <td>{{ stat.minutes_played }}</td>
+                    <td class="fw-semibold">{{ stat.points }}</td>
+                    <td>{{ stat.rebounds }}</td>
+                    <td>{{ stat.assists }}</td>
+                    <td>{{ stat.steals }}</td>
+                    <td>{{ stat.blocks }}</td>
+                    <td>{{ stat.turnovers }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="10" class="text-center text-muted py-5">暂无技术统计</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

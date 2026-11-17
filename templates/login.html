@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登录 - NBA 球队管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --login-bg: #0b0f14;
+            --panel-bg: #151b22;
+            --panel-border: #26313c;
+            --muted: #9aa7b4;
+            --accent: #0d6efd;
+        }
+
+        body {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            margin: 0;
+            background: var(--login-bg);
+            color: #dfe6ee;
+            padding: 24px;
+        }
+
+        .login-panel {
+            width: 100%;
+            max-width: 420px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+            padding: 32px;
+        }
+
+        .login-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #fff;
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: 0;
+        }
+
+        .login-subtitle {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .role-choice {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .role-choice input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .role-choice .role-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            color: #c7d0da;
+            transition: border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .role-choice input:checked + .role-box {
+            border-color: var(--accent);
+            background: rgba(13, 110, 253, 0.14);
+            color: #fff;
+        }
+
+        .form-control,
+        .form-select {
+            background-color: #0f1419;
+            border-color: var(--panel-border);
+            color: #dfe6ee;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            background-color: #0f1419;
+            border-color: var(--accent);
+            color: #dfe6ee;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+        }
+
+    </style>
+</head>
+<body>
+    <main class="login-panel">
+        <div class="login-brand mb-1">
+            <i class="bi bi-dribbble text-primary"></i>
+            <span>NBA Data Hub</span>
+        </div>
+        <div class="login-subtitle mb-4">选择登录身份以进入对应工作台</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} py-2 small" role="alert">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="post" class="mb-4">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <div class="row g-2 mb-3">
+                <div class="col-sm-4">
+                    <label class="role-choice">
+                        <input type="radio" name="role" value="management" checked>
+                        <span class="role-box">
+                            <i class="bi bi-briefcase"></i>
+                            管理层登录
+                        </span>
+                    </label>
+                </div>
+                <div class="col-sm-4">
+                    <label class="role-choice">
+                        <input type="radio" name="role" value="scorekeeper">
+                        <span class="role-box">
+                            <i class="bi bi-stopwatch"></i>
+                            记分员登录
+                        </span>
+                    </label>
+                </div>
+                <div class="col-sm-4">
+                    <label class="role-choice">
+                        <input type="radio" name="role" value="league_admin">
+                        <span class="role-box"><i class="bi bi-shield-check"></i>联赛管理员</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="username" class="form-label small">账号</label>
+                <input id="username" name="username" type="text" class="form-control" autocomplete="username" required autofocus>
+            </div>
+
+            <div class="mb-4">
+                <label for="password" class="form-label small">密码</label>
+                <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-2">
+                <i class="bi bi-box-arrow-in-right me-1"></i>登录
+            </button>
+        </form>
+
+    </main>
+</body>
+</html>

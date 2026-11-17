@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}添加球员 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <h1 class="h3 mb-4">添加球员</h1>
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <form action="{{ url_for('add_player') }}" method="post">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="name" class="form-label">姓名</label>
+                            <input type="text" class="form-control" id="name" name="name" required maxlength="80">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="position" class="form-label">位置</label>
+                            <select class="form-select" id="position" name="position" required>
+                                <option value="">请选择</option>
+                                {% for position in positions %}
+                                <option value="{{ position }}">{{ position }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="jersey_number" class="form-label">球衣号码</label>
+                            <input type="number" class="form-control" id="jersey_number" name="jersey_number" min="0" max="99" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="age" class="form-label">年龄</label>
+                            <input type="number" class="form-control" id="age" name="age" min="18" max="45" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="height_cm" class="form-label">身高（厘米）</label>
+                            <input type="number" step="0.1" class="form-control" id="height_cm" name="height_cm" min="170" max="235" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="weight_kg" class="form-label">体重（公斤）</label>
+                            <input type="number" step="0.1" class="form-control" id="weight_kg" name="weight_kg" min="60" max="160" required>
+                        </div>
+                        <div class="col-md-12">
+                            <label for="nationality" class="form-label">国籍</label>
+                            <input type="text" class="form-control" id="nationality" name="nationality" required maxlength="50">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>保存
+                        </button>
+                        <a href="{{ url_for('players') }}" class="btn btn-outline-secondary">取消</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

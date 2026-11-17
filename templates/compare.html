@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}球员对比 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="page-heading mb-4">
+    <h1 class="h3 mb-1">球员对比</h1>
+    <div class="text-secondary small">并排比较基础数据、高阶效率与投篮热区命中率</div>
+</div>
+
+<form class="row g-3 align-items-end mb-4" method="get">
+    <div class="col-md-5">
+        <label for="player1_id" class="form-label">球员 A</label>
+        <select class="form-select" id="player1_id" name="player1_id">
+            {% for player in players %}
+            <option value="{{ player.id }}" {% if player1_id == player.id %}selected{% endif %}>
+                {{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-5">
+        <label for="player2_id" class="form-label">球员 B</label>
+        <select class="form-select" id="player2_id" name="player2_id">
+            {% for player in players %}
+            <option value="{{ player.id }}" {% if player2_id == player.id %}selected{% endif %}>
+                {{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100">开始对比</button>
+    </div>
+</form>
+
+<div class="row g-4 mb-4">
+    {% for player in [player1, player2] %}
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body p-4">
+                {% if player %}
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                        <div class="h4 mb-1">{{ player.name }}</div>
+                        <div class="text-secondary">{{ player.team_name }} ({{ player.abbreviation }}) · {{ player.position }}</div>
+                    </div>
+                    <span class="badge text-bg-primary">#{{ player.age }}</span>
+                </div>
+                <div class="row text-center g-3">
+                    <div class="col-4">
+                        <div class="text-secondary small">场均得分</div>
+                        <div class="h4 mb-0">{{ player.ppg or "-" }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-secondary small">场均篮板</div>
+                        <div class="h4 mb-0">{{ player.rpg or "-" }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-secondary small">场均助攻</div>
+                        <div class="h4 mb-0">{{ player.apg or "-" }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-secondary small">TS%</div>
+                        <div class="h4 mb-0">{{ player.ts_percent or "-" }}%</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-secondary small">总正负值</div>
+                        <div class="h4 mb-0 {{ 'text-success' if player.plus_minus and player.plus_minus > 0 else 'text-danger' }}">{{ player.plus_minus or "-" }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-secondary small">每 48 分钟净效率</div>
+                        <div class="h4 mb-0">{{ player.net_rating_per48 or "-" }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-muted py-5 text-center">请选择球员</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <h2 class="h6 mb-3">投篮热区对比</h2>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>区域</th>
+                        <th>{{ player1.name if player1 else "球员 A" }} 命中率</th>
+                        <th>{{ player1.name if player1 else "球员 A" }} 命中/出手</th>
+                        <th>{{ player2.name if player2 else "球员 B" }} 命中率</th>
+                        <th>{{ player2.name if player2 else "球员 B" }} 命中/出手</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for index in range(zones1 | length) %}
+                    <tr>
+                        <td class="fw-semibold">{{ zones1[index].zone }}</td>
+                        <td class="{{ 'text-danger' if zones1[index].diff > 0 else 'text-primary' }}">{{ "%.1f"|format(zones1[index].player_pct) }}%</td>
+                        <td>{{ zones1[index].made }}/{{ zones1[index].attempts }}</td>
+                        <td class="{{ 'text-danger' if zones2[index].diff > 0 else 'text-primary' }}">{{ "%.1f"|format(zones2[index].player_pct) }}%</td>
+                        <td>{{ zones2[index].made }}/{{ zones2[index].attempts }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">暂无热区数据</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

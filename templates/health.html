@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}负荷管理 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h1 class="h3 mb-1">伤病预警与负荷管理</h1>
+        <div class="text-secondary small">出战状态、连续出场与疲劳度监测</div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">球员</th>
+                    <th scope="col">球队</th>
+                    <th scope="col">位置</th>
+                    <th scope="col">出战状态</th>
+                    <th scope="col">伤病说明</th>
+                    <th scope="col">连续出场</th>
+                    <th scope="col">场均分钟</th>
+                    <th scope="col">疲劳度</th>
+                    <th scope="col">负荷提示</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td class="fw-semibold text-nowrap">{{ row.player_name }}</td>
+                    <td>{{ row.team_name }} ({{ row.abbreviation }})</td>
+                    <td>{{ row.position }}</td>
+                    <td>
+                        {% if row.injury_status == "Healthy" %}
+                        <span class="badge text-bg-success">Healthy</span>
+                        {% elif row.injury_status == "Out" %}
+                        <span class="badge text-bg-danger">Out</span>
+                        {% elif row.injury_status == "Questionable" %}
+                        <span class="badge text-bg-warning">Questionable</span>
+                        {% elif row.injury_status == "Day-to-Day" %}
+                        <span class="badge text-bg-warning">Day-to-Day</span>
+                        {% else %}
+                        <span class="badge text-bg-info">Probable</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.injury_description }}</td>
+                    <td>{{ row.consecutive_games }}</td>
+                    <td>{{ row.avg_minutes }}</td>
+                    <td>{{ row.fatigue_score }}</td>
+                    <td>
+                        {% if row.load_warning == "High Load" %}
+                        <span class="badge text-bg-danger">High Load</span>
+                        {% elif row.load_warning == "Monitor" %}
+                        <span class="badge text-bg-warning">Monitor</span>
+                        {% else %}
+                        <span class="badge text-bg-success">Normal</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-5">暂无负荷数据</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

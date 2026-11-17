@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+{% set chart_rows = snapshot.get('timeline' if kind == 'review' else 'samples', []) %}
+<header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ title }}</h1>
+        <div class="text-secondary">{{ game.home_team_name }} vs {{ game.away_team_name }} · {{ game.game_date }}</div>
+    </div>
+    <a href="{{ url_for('game_detail', game_id=game.id) }}" class="btn btn-outline-secondary">比赛详情</a>
+</header>
+
+<section aria-label="报告设置" class="d-flex flex-wrap align-items-end gap-3 mb-4">
+    {% if kind == 'review' or current_user.role == ROLE_LEAGUE_ADMIN %}
+    <form action="{{ url_for('analysis_reports.overview', game_id=game.id, kind=kind) }}" method="get" class="d-flex align-items-end gap-2">
+        <div>
+            <label for="analysisTeam" class="form-label small mb-1">球队视角</label>
+            <select name="team" id="analysisTeam" class="form-select">
+                {% for id, name in teams.items() %}
+                <option value="{{ id }}" {% if id == team_id %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="btn btn-outline-secondary">切换</button>
+    </form>
+    {% else %}
+    <span class="text-secondary">{{ teams[team_id] }} · 本队备赛</span>
+    {% endif %}
+    {% if can_generate and snapshot.evidence %}
+    <form action="{{ url_for('analysis_reports.generate', game_id=game.id, kind=kind, team=team_id) }}" method="post" data-generate>
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary">{{ '按最新数据生成' if report else '生成' + title }}</button>
+        {% if report and report.source == 'rules' and report.generator != 'rules' and model_configured %}
+        <button class="btn btn-outline-primary" name="retry" value="1">重试模型生成</button>
+        {% endif %}
+    </form>
+    {% endif %}
+</section>
+
+{% if kind == 'scout' %}
+{% if snapshot.history_before %}
+<p class="text-secondary small">统计范围为 {{ snapshot.history_before }} 之前对手的全部完赛记录，共 {{ chart_rows | length }} 场。</p>
+{% endif %}
+<section class="card card-body mb-4" id="starting-lineups">
+    <h2 class="h5">首发五人</h2>
+    <div class="row g-3">
+        {% for id, name in teams.items() %}
+        {% set announced = snapshot.get('starters', []) | selectattr('team_id', 'equalto', id) | list %}
+        <div class="col-md-6">
+            <h3 class="h6">{{ name }}</h3>
+            {% if announced | length == 5 %}
+            <ul class="mb-0">
+                {% for player in announced %}<li>{{ player.name }} <span class="text-secondary">{{ player.position }}</span></li>{% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-secondary mb-0">暂无完整首发名单。</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% if availability_players %}
+    {% for id, players in availability_players | groupby('team_id') %}
+    <section class="card card-body mb-4">
+        <h3 class="h6 mb-0">{{ teams[id] }}首发五人设置</h3>
+        <form class="mt-3" method="post" data-starters action="{{ url_for('analysis_reports.publish_starters', game_id=game.id, team=team_id) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="team_id" value="{{ id }}">
+            <fieldset>
+                <legend class="fs-6">选择本队五名首发球员</legend>
+                <div class="row g-2 mb-3">
+                    {% for player in players %}
+                    <label class="col-sm-6 col-lg-4">
+                        <input class="form-check-input me-1" type="checkbox" name="player_ids" value="{{ player.id }}"
+                            {% if player.is_starter %}checked{% endif %} {% if player.status in ('injured', 'rest') %}disabled data-unavailable{% endif %}>
+                        {{ player.name }} · {{ player.position }}
+                        {% if player.status in ('injured', 'rest') %}· {{ availability_labels[player.status] }}{% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <button class="btn btn-primary">提交本队首发五人</button>
+                <span class="text-secondary small" data-selected-count aria-live="polite"></span>
+            </div>
+        </form>
+    </section>
+    {% endfor %}
+{% endif %}
+<section class="card mb-4" id="opponent-availability">
+    <div class="card-body">
+        <h2 class="h5">对手伤病与轮休 · {{ snapshot.subject }}</h2>
+        {% if snapshot.availability %}
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th scope="col">球员</th><th scope="col">状态</th><th scope="col">来源</th></tr></thead>
+                <tbody>
+                    {% for row in snapshot.availability %}
+                    <tr><th scope="row">{{ row.name }}</th><td>{{ row.label }}</td><td>{{ row.source }}{% if row.updated_at %} · {{ row.updated_at }}{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-secondary mb-0">没有记录可供展示。</p>
+        {% endif %}
+    </div>
+</section>
+{% if availability_players and can_publish_availability %}
+<details class="card card-body mb-4">
+    <summary class="fw-semibold">发布本场出勤公告</summary>
+    <form class="row g-3 align-items-end mt-1" method="post" action="{{ url_for('analysis_reports.publish_availability', game_id=game.id, team=team_id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md">
+            <label class="form-label" for="availabilityPlayer">球员</label>
+            <select class="form-select" id="availabilityPlayer" name="player_id" required>
+                {% for player in availability_players %}
+                <option value="{{ player.id }}">{{ teams[player.team_id] }} · {{ player.name }}{% if player.status %} · {{ availability_labels[player.status] }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md">
+            <label class="form-label" for="availabilityStatus">状态</label>
+            <select class="form-select" id="availabilityStatus" name="status" required>
+                <option value="" selected disabled>选择出勤状态</option>
+                {% for value, label in availability_labels.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                <option value="unpublished">撤回公告</option>
+            </select>
+        </div>
+        <div class="col-md-auto"><button class="btn btn-outline-primary">更新公告</button></div>
+    </form>
+</details>
+{% endif %}
+{% endif %}
+
+{% if snapshot.warnings %}
+<div class="alert alert-warning" role="status">
+    <div class="fw-semibold">数据说明</div>
+    <ul class="mb-0 ps-4">
+        {% for warning in snapshot.warnings %}<li>{{ warning }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% set chosen = report.content if report and report.content else preview if not report else None %}
+{% if chosen and chosen["items"] %}
+<section class="card mb-4" aria-labelledby="summary-title">
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <h2 id="summary-title" class="h5 mb-0">教练组建议</h2>
+            <span class="badge text-bg-secondary">{{ 'AI 整理' if report and report.source == 'model' else '数据建议' }}</span>
+            {% if report and report.source == 'model' %}<span class="text-secondary small">{{ report.generator }}</span>{% endif %}
+        </div>
+        <ol class="mb-0 ps-4">
+            {% for item in chosen["items"] %}
+            {% set detail = evidence[item.evidence_id] %}
+            <li class="mb-3">
+                <a class="fw-semibold" href="#evidence-{{ detail.id }}">{{ detail.title }}</a>
+                <div>{{ detail.fact }}</div>
+                <div class="text-secondary small mt-1">{{ detail.recommendation or actions[item.action_id] }}</div>
+            </li>
+            {% endfor %}
+        </ol>
+        {% if report and report.source == 'rules' and report.generator != 'rules' %}
+        <div class="text-secondary small">模型暂不可用，已使用公开数据生成基础报告。</div>
+        {% endif %}
+    </div>
+</section>
+{% elif report %}
+<div class="alert alert-info" role="status">
+    {% if report.expired %}上次生成已超过等待时间，可重新提交。
+    {% else %}报告正在生成。<a class="alert-link" href="{{ request.path }}">刷新查看</a>。{% endif %}
+</div>
+{% elif not preview["items"] %}
+<p class="text-secondary small">现有比赛记录还不足以提出具体战术调整。可查看下面的比赛证据，再结合录像判断。</p>
+{% elif snapshot.evidence and not model_configured %}
+<p class="text-secondary small">当前使用比赛数据和规则生成报告。</p>
+{% endif %}
+
+{% if snapshot.score %}
+<section class="row g-3 mb-4" aria-label="比赛概况">
+    <div class="col-sm-6">
+        <div class="card card-body h-100">
+            <div class="text-secondary small">终场比分 · 本队比对手</div>
+            <div class="h3 mb-0">{{ snapshot.score[0] }} : {{ snapshot.score[1] }}</div>
+        </div>
+    </div>
+    {% if snapshot.timeline %}
+    <div class="col-sm-6">
+        <div class="card card-body h-100">
+            <div class="text-secondary small">领先方变化</div>
+            <div class="h3 mb-0">{{ snapshot.lead_changes }} 次</div>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if chart_rows %}
+<section class="card mb-4" aria-labelledby="chart-title">
+    <div class="card-body">
+        <h2 id="chart-title" class="h5">{{ '累计比分走势' if kind == 'review' else snapshot.subject + '赛前战绩' }}</h2>
+        <div style="height: 240px"><canvas id="analysisTrend" role="img" aria-labelledby="chart-title"></canvas></div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm mb-0">
+                {% if kind == 'review' %}
+                <thead><tr><th scope="col">节次</th><th scope="col">本队得分</th><th scope="col">对手得分</th><th scope="col">分差</th></tr></thead>
+                <tbody>
+                    {% for row in snapshot.periods %}
+                    <tr><th scope="row">{{ row.label }}</th><td>{{ row.ours }}</td><td>{{ row.theirs }}</td><td>{{ "%+d"|format(row.margin) }}</td></tr>
+                    {% endfor %}
+                </tbody>
+                {% else %}
+                <thead><tr><th scope="col">比赛</th><th scope="col">{{ snapshot.subject }}得分</th><th scope="col">失分</th><th scope="col">投篮记录</th></tr></thead>
+                <tbody>
+                    {% for row in snapshot.samples %}
+                    <tr>
+                        <th scope="row"><a href="{{ url_for('game_detail', game_id=row.id) }}">{{ row.date }} · #{{ row.id }}</a></th>
+                        <td>{{ row.ours }}</td><td>{{ row.theirs }}</td><td>{{ row.shot_count }} 次</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if snapshot.evidence %}
+<section class="mb-4" aria-labelledby="evidence-title">
+    <h2 id="evidence-title" class="h5 mb-3">比赛证据</h2>
+    {% for item in snapshot.evidence %}
+    <article id="evidence-{{ item.id }}" class="py-3 border-top">
+        <h3 class="h6">{{ item.title }}</h3>
+        <p class="mb-1">{{ item.fact }}</p>
+        <div class="d-flex flex-wrap gap-3 small">
+            {% for ref in item.refs %}
+            <a href="{{ url_for('play_by_play' if ref.anchor.startswith('event-') else 'game_detail', game_id=ref.game_id, _anchor=ref.anchor) }}">{{ ref.label }}</a>
+            {% endfor %}
+        </div>
+        {% for zone in snapshot.zones if zone.id == (item.zone_id or item.id) %}
+        <details class="mt-2">
+            <summary class="small">查看{{ zone.label }}的 {{ zone.shots | length }} 条出手明细{% if zone.shots | length < zone.attempts %}（统计覆盖 {{ zone.attempts }} 次）{% endif %}</summary>
+            <div class="table-responsive mt-2" style="max-height: 270px">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th scope="col">记录</th><th scope="col">时间</th><th scope="col">坐标（厘米）</th><th scope="col">结果</th></tr></thead>
+                    <tbody>
+                        {% for shot in zone.shots %}
+                        <tr>
+                            <td>#{{ shot.id }} · <a href="{{ url_for('game_detail', game_id=shot.game_id) }}">比赛 #{{ shot.game_id }}</a></td>
+                            <td>{{ shot.clock }}</td><td>{{ shot.x }}, {{ shot.y }}</td><td>{{ '命中' if shot.made else '未中' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+        {% endfor %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if history %}
+<section aria-labelledby="history-title" class="mb-4">
+    <h2 id="history-title" class="h5">报告历史</h2>
+    <ul class="list-group">
+        {% for saved in history %}
+        <li class="list-group-item d-flex justify-content-between gap-2">
+            <a href="{{ url_for('analysis_reports.report_detail', game_id=game.id, report_id=saved.id) }}"
+               {% if report and report.id == saved.id %}aria-current="page"{% endif %}>{{ saved.created_at }}</a>
+            <span class="text-secondary small">{{ 'AI 整理' if saved.source == 'model' else '规则生成' if saved.source == 'rules' else '待完成' }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<script>
+document.querySelectorAll("[data-starters]").forEach((form) => {
+    const picks = [...form.querySelectorAll('input[name="player_ids"]:not([data-unavailable])')];
+    const submit = form.querySelector("button");
+    const label = form.querySelector("[data-selected-count]");
+    const update = () => {
+        const count = picks.filter((pick) => pick.checked).length;
+        label.textContent = `已选 ${count} / 5 人`;
+        submit.disabled = count !== 5;
+        picks.forEach((pick) => { pick.disabled = count >= 5 && !pick.checked; });
+    };
+    form.addEventListener("change", update);
+    update();
+});
+document.querySelectorAll("[data-generate]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+        if (form.dataset.submitting) {
+            event.preventDefault();
+            return;
+        }
+        form.dataset.submitting = "true";
+        form.setAttribute("aria-busy", "true");
+        if (event.submitter) event.submitter.textContent = "正在生成…";
+    });
+});
+const chart = document.getElementById("analysisTrend");
+if (chart && typeof Chart !== "undefined") {
+    const rows = {{ chart_rows | tojson }};
+    const isReview = {{ (kind == 'review') | tojson }};
+    new Chart(chart, {
+        type: "line",
+        data: {
+            labels: rows.map((row) => isReview ? row.clock : row.date),
+            datasets: [
+                {label: isReview ? "本队得分" : "对手得分", data: rows.map((row) => row.ours), borderColor: "#6ea8fe", pointRadius: isReview ? 0 : 4},
+                {label: isReview ? "对手得分" : "对手失分", data: rows.map((row) => row.theirs), borderColor: "#ea868f", pointRadius: isReview ? 0 : 4}
+            ]
+        },
+        options: {
+            maintainAspectRatio: false,
+            interaction: {mode: "index", intersect: false},
+            scales: {x: {ticks: {maxTicksLimit: 8}}, y: {title: {display: true, text: "分"}}}
+        }
+    });
+}
+</script>
+{% endblock %}

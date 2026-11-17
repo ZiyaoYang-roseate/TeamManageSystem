@@ -1,0 +1,837 @@
+{% extends "base.html" %}
+
+{% block title %}实时计分面板 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
+    <div>
+        <h1 class="h3 mb-1">实时比赛计分面板</h1>
+        <div class="text-secondary small" id="gameDate">
+            {{ game.game_date }} · {{ game.season }} 赛季
+        </div>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="input-group input-group-sm" style="width: 110px;">
+            <span class="input-group-text">节次</span>
+            <input id="periodInput" type="number" class="form-control" min="1" max="20" value="{{ game.period or 1 }}">
+        </div>
+        <div class="input-group input-group-sm" style="width: 110px;">
+            <span class="input-group-text">分</span>
+            <input id="clockMinutes" type="number" class="form-control" min="0" max="{{ 12 if (game.period or 1) <= 4 else 5 }}" value="{{ (game.seconds_remaining // 60) if game.seconds_remaining is not none else (12 if (game.period or 1) <= 4 else 5) }}">
+        </div>
+        <div class="input-group input-group-sm" style="width: 110px;">
+            <span class="input-group-text">秒</span>
+            <input id="clockSeconds" type="number" class="form-control" min="0" max="59" value="{{ (game.seconds_remaining % 60) if game.seconds_remaining is not none else 0 }}">
+        </div>
+        <button id="clockButton" type="button" class="btn btn-sm btn-primary">
+            <i class="bi bi-clock me-1"></i>更新时间
+        </button>
+        <span id="currentClock" class="badge text-bg-light">
+            Q{{ game.period or 1 }} {{ ((game.seconds_remaining if game.seconds_remaining is not none else 720) // 60) }}:{{ "%02d" | format((game.seconds_remaining if game.seconds_remaining is not none else 720) % 60) }}
+        </span>
+        <a href="{{ url_for('scorekeeper_calendar') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>返回日历
+        </a>
+    </div>
+</div>
+
+<div class="alert {{ 'alert-success' if date_relation == 'today' else ('alert-warning' if date_relation == 'future' else 'alert-secondary') }} d-flex flex-wrap justify-content-between align-items-center gap-2" role="alert">
+    <div>
+        <span class="fw-semibold">系统比赛日：{{ business_date }}</span>
+        <span class="ms-2">{{ '该场比赛属于当前比赛日' if date_relation == 'today' else date_message }}</span>
+    </div>
+    {% if date_relation != 'today' %}
+    <span class="badge text-bg-secondary"><i class="bi bi-lock me-1"></i>计分已锁定</span>
+    {% else %}
+    <span class="badge text-bg-success"><i class="bi bi-calendar-check me-1"></i>当前比赛日</span>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-4">
+        <div class="row align-items-center text-center g-3">
+            <div class="col-5">
+                <div class="text-secondary small text-uppercase" id="homeTeamName">
+                    {{ game.home_team_name }}
+                </div>
+                <div class="display-3 fw-bold score-value" id="homeScore">{{ game.home_score }}</div>
+            </div>
+            <div class="col-2">
+                <div id="gameStatusBadge" class="badge text-bg-success mb-2">进行中</div>
+                <div class="text-secondary fw-semibold">VS</div>
+                <button id="startGameButton" type="button" class="btn btn-sm btn-primary mt-3 {{ 'd-none' if not needs_starters else '' }}" {{ 'disabled' if not can_score_today or not starters_ready else '' }}>
+                    <i class="bi bi-play-fill me-1"></i><span>{{ '确认首发并继续' if game.status == 'live' else '开始比赛' }}</span>
+                </button>
+                <button id="endGameButton" type="button" class="btn btn-sm btn-outline-danger mt-3 {{ 'd-none' if game.status != 'live' else '' }}" disabled>
+                    <i class="bi bi-flag me-1"></i>结束比赛
+                </button>
+            </div>
+            <div class="col-5">
+                <div class="text-secondary small text-uppercase" id="awayTeamName">
+                    {{ game.away_team_name }}
+                </div>
+                <div class="display-3 fw-bold score-value" id="awayScore">{{ game.away_score }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="startingLineupStatus" class="alert alert-info {{ 'd-none' if not needs_starters else '' }}" role="status">
+    <span id="starterReadinessMessage">{{ '双方已提交首发，可以确认名单。' if starters_ready else '计分前需要双方球队在赛前分析提交首发五人。' }}</span>
+    <div class="small mt-1" id="starterReadinessTeams">{{ game.home_team_name }}（{{ '已提交' if game.home_team_id in starter_ready_teams else '未提交' }}） · {{ game.away_team_name }}（{{ '已提交' if game.away_team_id in starter_ready_teams else '未提交' }}）</div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-6">
+        <section class="card shadow-sm h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold" id="homeRosterTitle">{{ game.home_team_name }}</span>
+                <span class="small text-secondary">{{ game.home_team_abbr }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>球员</th>
+                            <th class="text-end">MIN</th>
+                            <th class="text-end">PTS</th>
+                            <th class="text-end">REB</th>
+                            <th class="text-end">AST</th>
+                            <th class="text-end">STL</th>
+                            <th class="text-end">BLK</th>
+                            <th class="text-end">TO</th>
+                            <th class="text-end">PF</th>
+                            <th class="text-center">在场</th>
+                            <th class="text-end">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="homeRosterBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-6">
+        <section class="card shadow-sm h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold" id="awayRosterTitle">{{ game.away_team_name }}</span>
+                <span class="small text-secondary">{{ game.away_team_abbr }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>球员</th>
+                            <th class="text-end">MIN</th>
+                            <th class="text-end">PTS</th>
+                            <th class="text-end">REB</th>
+                            <th class="text-end">AST</th>
+                            <th class="text-end">STL</th>
+                            <th class="text-end">BLK</th>
+                            <th class="text-end">TO</th>
+                            <th class="text-end">PF</th>
+                            <th class="text-center">在场</th>
+                            <th class="text-end">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="awayRosterBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<section class="card shadow-sm mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">事件流</span>
+        <span class="small text-secondary">最新事件优先</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>球队</th>
+                    <th>事件</th>
+                    <th class="text-end">比分</th>
+                </tr>
+            </thead>
+            <tbody id="eventBody"></tbody>
+        </table>
+    </div>
+</section>
+
+<div class="modal fade" id="shotLocationModal" tabindex="-1" aria-labelledby="shotLocationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="shotLocationModalLabel">选择投篮位置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div class="shot-location-court">
+                    <svg id="shotLocationSvg" viewBox="0 0 500 470" role="img" aria-label="选择投篮位置">
+                        <rect x="0" y="0" width="500" height="470" class="shot-court-bg"></rect>
+                        <rect x="0" y="0" width="500" height="430" class="shot-court-line"></rect>
+                        <circle cx="250" cy="0" r="56" class="shot-court-line"></circle>
+                        <line x1="170" y1="240" x2="330" y2="240" class="shot-court-line"></line>
+                        <rect x="170" y="240" width="160" height="190" class="shot-court-line"></rect>
+                        <path d="M 170,240 A 60,60 0 0,1 330,240" class="shot-court-line"></path>
+                        <path d="M 30,290 A 237.5,237.5 0 0,1 470,290" class="shot-court-line"></path>
+                        <line x1="30" y1="290" x2="30" y2="430" class="shot-court-line"></line>
+                        <line x1="470" y1="290" x2="470" y2="430" class="shot-court-line"></line>
+                        <circle cx="250" cy="390" r="7.5" class="shot-court-line"></circle>
+                        <line x1="230" y1="390" x2="270" y2="390" class="shot-court-line"></line>
+                        <circle id="shotLocationMarker" r="8" fill="#ffeb3b" stroke="#111" stroke-width="2" hidden></circle>
+                    </svg>
+                </div>
+                <div id="shotLocationInfo" class="small text-secondary mt-2">点击球场选择位置</div>
+                <div class="small text-muted mt-1">两分球只能选择三分线内；三分球只能选择三分线外。</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="cancelShotLocationButton">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmShotLocationButton" disabled>
+                    <i class="bi bi-check-lg me-1"></i>确认投篮
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+<script>
+    const gameId = {{ game.id }};
+    const initialCanScoreToday = {{ can_score_today | tojson }};
+    let state = null;
+    let isSubmitting = false;
+    let clockInputsInitialized = false;
+    let pendingShotAction = null;
+    let selectedShotLocation = null;
+    let lineupDirty = false;
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+        }[character]));
+    }
+
+    function setStatusBadge(status) {
+        const badge = document.getElementById("gameStatusBadge");
+        badge.className = "badge mb-2";
+        if (status === "live") {
+            badge.classList.add("text-bg-success");
+            badge.textContent = "进行中";
+        } else if (status === "scheduled") {
+            badge.classList.add("text-bg-warning");
+            badge.textContent = "待开始";
+        } else {
+            badge.classList.add("text-bg-secondary");
+            badge.textContent = "已结束";
+        }
+    }
+
+    function applyControlState() {
+        if (!state?.game) return;
+        const game = state.game;
+        const status = game.status;
+        const needsStarters = state.needs_starters;
+        const live = status === "live" && !needsStarters;
+        const canScoreToday = state ? state.can_score_today === true : initialCanScoreToday;
+        const startButton = document.getElementById("startGameButton");
+        const endButton = document.getElementById("endGameButton");
+        startButton.classList.toggle("d-none", !needsStarters);
+        endButton.classList.toggle("d-none", status !== "live");
+        startButton.disabled = isSubmitting || !needsStarters || !canScoreToday || !state.starters_ready;
+        const lineupStatus = document.getElementById("startingLineupStatus");
+        lineupStatus.classList.toggle("d-none", !needsStarters);
+        if (needsStarters) {
+            document.getElementById("starterReadinessMessage").textContent = state.starters_ready
+                ? "双方已提交首发，可以确认名单。"
+                : "计分前需要双方球队在赛前分析提交首发五人。";
+            const ready = (teamId) => state.starter_ready_teams.includes(teamId) ? "已提交" : "未提交";
+            document.getElementById("starterReadinessTeams").textContent =
+                `${game.home_team_name}（${ready(game.home_team_id)}） · ${game.away_team_name}（${ready(game.away_team_id)}）`;
+        }
+        const canEnd = game.period >= 4 && game.seconds_remaining === 0 && game.home_score !== game.away_score;
+        endButton.disabled = isSubmitting || !live || !canScoreToday || !canEnd;
+        endButton.title = canEnd ? "" : "末节时钟归零且比分分出胜负后才能结束";
+        const reverse = document.getElementById("reverseEventButton");
+        if (reverse) reverse.disabled = isSubmitting || !live || !canScoreToday;
+        document.querySelectorAll(".score-action").forEach((button) => {
+            button.disabled = isSubmitting || !live || !canScoreToday;
+        });
+        document.querySelectorAll(".on-court-check").forEach((checkbox) => {
+            checkbox.disabled = isSubmitting || !live || !canScoreToday;
+        });
+        document.getElementById("periodInput").disabled = isSubmitting || !live || !canScoreToday;
+        document.getElementById("clockMinutes").disabled = isSubmitting || !live || !canScoreToday;
+        document.getElementById("clockSeconds").disabled = isSubmitting || !live || !canScoreToday;
+        document.getElementById("clockButton").disabled = isSubmitting || !live || !canScoreToday;
+    }
+
+    function renderScoreboard() {
+        if (!state || !state.game) return;
+        const game = state.game;
+        document.getElementById("homeScore").textContent = game.home_score;
+        document.getElementById("awayScore").textContent = game.away_score;
+        document.getElementById("homeTeamName").textContent = game.home_team_name;
+        document.getElementById("awayTeamName").textContent = game.away_team_name;
+        document.getElementById("homeRosterTitle").textContent = game.home_team_name;
+        document.getElementById("awayRosterTitle").textContent = game.away_team_name;
+        const period = game.period || 1;
+        const secondsRemaining = game.seconds_remaining ?? (period <= 4 ? 720 : 300);
+        const minutes = Math.floor(secondsRemaining / 60);
+        const remainingSeconds = String(secondsRemaining % 60).padStart(2, "0");
+        document.getElementById("currentClock").textContent = `Q${period} ${minutes}:${remainingSeconds}`;
+        if (!clockInputsInitialized) {
+            document.getElementById("periodInput").value = period;
+            document.getElementById("clockMinutes").value = minutes;
+            document.getElementById("clockSeconds").value = Number(secondsRemaining % 60);
+            clockInputsInitialized = true;
+        }
+        document.getElementById("clockMinutes").max = period <= 4 ? 12 : 5;
+        setStatusBadge(game.status);
+        applyControlState();
+    }
+
+    function actionButton(player, action, value, label, title, className, shotRequired = false, made = 1) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `btn btn-sm ${className} score-action`;
+        button.dataset.playerId = player.id;
+        button.dataset.action = action;
+        button.dataset.value = value;
+        button.dataset.playerName = player.name;
+        if (shotRequired) {
+            button.dataset.shotRequired = "true";
+            button.dataset.made = made;
+        }
+        button.setAttribute("title", title);
+        button.setAttribute("aria-label", title);
+        button.textContent = label;
+        return button;
+    }
+
+    function renderRoster(containerId, players, teamId) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = "";
+        players.forEach((player) => {
+            const row = document.createElement("tr");
+            const nameCell = document.createElement("td");
+            nameCell.className = "text-nowrap";
+            nameCell.innerHTML = `<div class="fw-semibold">${escapeHtml(player.name)}</div>`;
+            nameCell.innerHTML += `<div class="small text-secondary">${escapeHtml(player.position)} · #${player.jersey_number}</div>`;
+
+            const statCells = ["minutes_played", "points", "rebounds", "assists", "steals", "blocks", "turnovers", "fouls"]
+                .map((field) => {
+                    const cell = document.createElement("td");
+                    cell.className = "text-end fw-semibold";
+                    cell.textContent = player[field] ?? 0;
+                    return cell;
+                });
+
+            const onCourtCell = document.createElement("td");
+            onCourtCell.className = "text-center";
+            const onCourtCheck = document.createElement("input");
+            onCourtCheck.type = "checkbox";
+            onCourtCheck.className = "form-check-input on-court-check";
+            onCourtCheck.dataset.playerId = player.id;
+            onCourtCheck.dataset.teamId = teamId;
+            onCourtCheck.checked = state.needs_starters
+                ? state.published_starters.some((starter) => starter.id === player.id)
+                : Boolean(player.is_on_court);
+            onCourtCheck.setAttribute("aria-label", `${player.name} 在场`);
+            onCourtCell.appendChild(onCourtCheck);
+
+            const actionsCell = document.createElement("td");
+            actionsCell.className = "text-end text-nowrap";
+            const group = document.createElement("div");
+            group.className = "btn-group btn-group-sm";
+            group.append(
+                actionButton(player, "add_point", 1, "FT+1", `${player.name} 罚球命中`, "btn-outline-success"),
+                actionButton(player, "add_free_throw_miss", 0, "FT×", `${player.name} 罚球不中`, "btn-outline-warning"),
+                actionButton(player, "add_point", 2, "+2", `${player.name} 加 2 分`, "btn-outline-success", true, 1),
+                actionButton(player, "add_point", 3, "+3", `${player.name} 加 3 分`, "btn-outline-success", true, 1),
+                actionButton(player, "add_miss", 2, "2×", `${player.name} 两分不中`, "btn-outline-warning", true, 0),
+                actionButton(player, "add_miss", 3, "3×", `${player.name} 三分不中`, "btn-outline-warning", true, 0),
+                actionButton(player, "add_rebound", 1, "REB", `${player.name} 加篮板`, "btn-outline-primary"),
+                actionButton(player, "add_assist", 1, "AST", `${player.name} 加助攻`, "btn-outline-primary"),
+                actionButton(player, "add_steal", 1, "STL", `${player.name} 加抢断`, "btn-outline-primary"),
+                actionButton(player, "add_block", 1, "BLK", `${player.name} 加盖帽`, "btn-outline-primary"),
+                actionButton(player, "add_turnover", 1, "TO", `${player.name} 加失误`, "btn-outline-warning"),
+                actionButton(player, "add_foul", 1, "PF", `${player.name} 加犯规`, "btn-outline-danger")
+            );
+            actionsCell.appendChild(group);
+
+            row.append(nameCell, ...statCells, onCourtCell, actionsCell);
+            container.appendChild(row);
+        });
+    }
+
+    function renderEvents() {
+        const container = document.getElementById("eventBody");
+        container.innerHTML = "";
+        if (!state || !state.events || !state.events.length) {
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+            cell.colSpan = 4;
+            cell.className = "text-center text-muted py-4";
+            cell.textContent = "暂无事件记录";
+            row.appendChild(cell);
+            container.appendChild(row);
+            return;
+        }
+
+        state.events.forEach((event) => {
+            const row = document.createElement("tr");
+            const time = document.createElement("td");
+            time.className = "text-nowrap";
+            const minutes = Math.floor(event.seconds_remaining / 60);
+            const seconds = String(event.seconds_remaining % 60).padStart(2, "0");
+            time.textContent = `Q${event.period} ${minutes}:${seconds}`;
+            const team = document.createElement("td");
+            team.textContent = event.team_abbr;
+            const description = document.createElement("td");
+            description.textContent = event.description;
+            if (event.voided_at) {
+                const correction = document.createElement("div");
+                correction.className = "small text-warning-emphasis";
+                correction.textContent = "已撤销 · " + event.correction_reason;
+                description.append(correction);
+            } else if (event.id === state.reversible_event_id && state.game.status === "live" && !state.needs_starters) {
+                const reverse = document.createElement("button");
+                reverse.type = "button";
+                reverse.id = "reverseEventButton";
+                reverse.className = "btn btn-sm btn-outline-warning ms-2";
+                reverse.textContent = "撤销误录";
+                reverse.addEventListener("click", () => reverseEvent(event.id));
+                description.append(reverse);
+            }
+            const score = document.createElement("td");
+            score.className = "text-end fw-semibold";
+            score.textContent = event.voided_at ? "—" : `${event.score_home} : ${event.score_away}`;
+            row.append(time, team, description, score);
+            container.appendChild(row);
+        });
+    }
+
+    function showToast(message, isError = false) {
+        const toast = document.createElement("div");
+        toast.className = `toast align-items-center border-0 ${isError ? "text-bg-danger" : "text-bg-success"}`;
+        toast.innerHTML = `<div class="d-flex"><div class="toast-body">${escapeHtml(message)}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+        document.getElementById("toastContainer").appendChild(toast);
+        new bootstrap.Toast(toast).show();
+    }
+
+    async function loadState(force = false) {
+        if (isSubmitting && !force) return;
+        try {
+            const response = await fetch(`/api/scorekeeper/game/${gameId}`, { cache: "no-store" });
+            if (!response.ok) return;
+            state = await response.json();
+            renderScoreboard();
+            if (!lineupDirty || force) {
+                renderRoster("homeRosterBody", state.home_stats || [], state.game.home_team_id);
+                renderRoster("awayRosterBody", state.away_stats || [], state.game.away_team_id);
+                if (force) lineupDirty = false;
+            }
+            renderEvents();
+            applyControlState();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function sendAction(playerId, action, value, playerName, extraPayload = {}) {
+        if (isSubmitting) return;
+        isSubmitting = true;
+        applyControlState();
+        try {
+            const requestId = crypto.randomUUID();
+            const payload = {
+                player_id: playerId,
+                action,
+                value,
+                ...extraPayload,
+                request_id: requestId,
+            };
+            const send = async () => {
+                const response = await fetch(`/api/scorekeeper/game/${gameId}/update`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+                    body: JSON.stringify(payload)
+                });
+                return { response, result: await response.json() };
+            };
+            const { response, result } = await send().catch(() => send());
+            if (!response.ok) {
+                throw new Error(result.error || "计分操作失败");
+            }
+            showToast(result.message || "已更新");
+            await loadState(true);
+        } catch (error) {
+            showToast(error.message, true);
+        } finally {
+            isSubmitting = false;
+            applyControlState();
+        }
+    }
+
+    function resetShotModal() {
+        pendingShotAction = null;
+        selectedShotLocation = null;
+        const marker = document.getElementById("shotLocationMarker");
+        marker.setAttribute("hidden", "");
+        document.getElementById("shotLocationInfo").textContent = "点击球场选择位置";
+        document.getElementById("shotLocationInfo").className = "small text-secondary mt-2";
+        document.getElementById("shotLocationModalLabel").textContent = "选择投篮位置";
+        document.getElementById("confirmShotLocationButton").disabled = true;
+    }
+
+    function openShotModal(playerId, action, value, playerName, made) {
+        pendingShotAction = { playerId, action, value, playerName, made };
+        selectedShotLocation = null;
+        document.getElementById("shotLocationMarker").setAttribute("hidden", "");
+        document.getElementById("shotLocationModalLabel").textContent = `选择${value}分投篮位置`;
+        document.getElementById("shotLocationInfo").textContent =
+            value === 3 ? "请选择三分线外的位置" : "请选择三分线内的位置";
+        document.getElementById("shotLocationInfo").className = "small text-secondary mt-2";
+        document.getElementById("confirmShotLocationButton").disabled = true;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById("shotLocationModal")).show();
+    }
+
+    function isThreePointLocation(x, y) {
+        if (y >= 290) return Math.abs(x) > 220;
+        return Math.hypot(x, y - 390) > 237.5;
+    }
+
+    function overtimeEntryError(period, secondsRemaining) {
+        if (!state || !state.game) return "";
+        const game = state.game;
+        const currentPeriod = Number(game.period);
+        if (period <= 4 || period <= currentPeriod) return "";
+        if (currentPeriod < 4) return "必须先完成第四节，才能进入加时赛";
+        if (period !== currentPeriod + 1) return "加时赛必须逐节进入，不能跳过节次";
+        if (Number(game.seconds_remaining) !== 0) return "当前节比赛时间尚未结束，不能进入加时赛";
+        if (Number(game.home_score) !== Number(game.away_score)) return "当前比分未打平，不能进入加时赛";
+        if (secondsRemaining !== 300) return "新加时赛必须从 5:00 开始";
+        return "";
+    }
+
+    function updateShotMarker() {
+        if (!selectedShotLocation) return;
+        const marker = document.getElementById("shotLocationMarker");
+        const svgX = selectedShotLocation.x + 250;
+        const svgY = selectedShotLocation.y;
+        marker.removeAttribute("hidden");
+        marker.setAttribute("cx", svgX);
+        marker.setAttribute("cy", svgY);
+        const expectedThree = Number(pendingShotAction.value) === 3;
+        const actualThree = isThreePointLocation(
+            selectedShotLocation.x,
+            selectedShotLocation.y
+        );
+        const onCourt = selectedShotLocation.y <= 430;
+        const valid = onCourt && expectedThree === actualThree;
+        const info = document.getElementById("shotLocationInfo");
+        marker.setAttribute("fill", valid ? "#ffeb3b" : "#dc3545");
+        info.textContent = !onCourt
+            ? "该位置超出球场边界，请在底线以内选择"
+            : valid
+            ? `位置有效 · X: ${selectedShotLocation.x} · Y: ${selectedShotLocation.y}`
+            : expectedThree
+                ? "该位置在三分线内，请选择三分线外"
+                : "该位置在三分线外，请选择三分线内";
+        info.className = `small mt-2 ${valid ? "text-success" : "text-danger"}`;
+        document.getElementById("confirmShotLocationButton").disabled = !valid;
+    }
+
+    function handleShotCourtClick(event) {
+        const svg = document.getElementById("shotLocationSvg");
+        const rect = svg.getBoundingClientRect();
+        const svgX = (event.clientX - rect.left) / rect.width * 500;
+        const svgY = (event.clientY - rect.top) / rect.height * 470;
+        const x = Math.max(-250, Math.min(250, Math.round(svgX - 250)));
+        const y = Math.max(0, Math.min(470, Math.round(svgY)));
+        selectedShotLocation = { x, y };
+        updateShotMarker();
+    }
+
+    async function confirmShotLocation() {
+        if (!pendingShotAction || !selectedShotLocation) return;
+        const action = pendingShotAction;
+        await sendAction(
+            action.playerId,
+            action.action,
+            action.value,
+            action.playerName,
+            {
+                shot_x: selectedShotLocation.x,
+                shot_y: selectedShotLocation.y
+            }
+        );
+        bootstrap.Modal.getOrCreateInstance(document.getElementById("shotLocationModal")).hide();
+        resetShotModal();
+    }
+
+    function getSelectedPlayerIds(teamId) {
+        return Array.from(
+            document.querySelectorAll(`.on-court-check[data-team-id="${teamId}"]:checked`)
+        ).map((checkbox) => Number(checkbox.dataset.playerId));
+    }
+
+    async function saveLineup(teamId) {
+        if (isSubmitting) return;
+        const playerIds = getSelectedPlayerIds(teamId);
+        if (playerIds.length !== 5) {
+            showToast("每支球队必须选择 5 名在场球员", true);
+            return;
+        }
+        isSubmitting = true;
+        applyControlState();
+        try {
+            const response = await fetch(`/api/scorekeeper/game/${gameId}/lineup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+                body: JSON.stringify({ team_id: teamId, player_ids: playerIds })
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || "阵容更新失败");
+            }
+            showToast(result.message || "阵容已更新");
+            await loadState(true);
+        } catch (error) {
+            showToast(error.message, true);
+            await loadState(true);
+        } finally {
+            isSubmitting = false;
+            applyControlState();
+        }
+    }
+
+    function handleLineupChange(checkbox) {
+        const teamId = Number(checkbox.dataset.teamId);
+        lineupDirty = true;
+        const checkedCount = getSelectedPlayerIds(teamId).length;
+        if (checkedCount > 5) {
+            checkbox.checked = false;
+            showToast("每支球队最多同时 5 名球员在场", true);
+            return;
+        }
+        if (checkedCount === 5) {
+            saveLineup(teamId);
+        } else {
+            showToast("请继续选择至 5 名在场球员", true);
+        }
+    }
+
+    async function updateClock() {
+        if (isSubmitting) return;
+        const period = Number(document.getElementById("periodInput").value);
+        const minutes = Number(document.getElementById("clockMinutes").value);
+        const seconds = Number(document.getElementById("clockSeconds").value);
+        const periodLengthMinutes = period <= 4 ? 12 : 5;
+        const totalSeconds = minutes * 60 + seconds;
+        if (period < 1 || period > 20 || minutes < 0 || seconds < 0 || seconds > 59 || totalSeconds > periodLengthMinutes * 60) {
+            showToast("请输入合法的节次和比赛时间", true);
+            return;
+        }
+        const overtimeError = overtimeEntryError(period, totalSeconds);
+        if (overtimeError) {
+            showToast(overtimeError, true);
+            return;
+        }
+        isSubmitting = true;
+        applyControlState();
+        try {
+            const response = await fetch(`/api/scorekeeper/game/${gameId}/clock`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+                body: JSON.stringify({
+                    period,
+                    seconds_remaining: totalSeconds
+                })
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || "时间更新失败");
+            }
+            showToast(result.message || "比赛时间已更新");
+            await loadState(true);
+        } catch (error) {
+            showToast(error.message, true);
+            await loadState(true);
+        } finally {
+            isSubmitting = false;
+            applyControlState();
+        }
+    }
+
+    async function startGame() {
+        if (isSubmitting) return;
+        isSubmitting = true;
+        applyControlState();
+        try {
+            const response = await fetch(`/api/scorekeeper/game/${gameId}/start`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} }
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || "开始比赛失败");
+            }
+            showToast(result.message || "比赛已开始");
+            await loadState(true);
+        } catch (error) {
+            showToast(error.message, true);
+        } finally {
+            isSubmitting = false;
+            applyControlState();
+        }
+    }
+
+    async function reverseEvent(eventId) {
+        if (isSubmitting) return;
+        const reason = prompt("请输入撤销原因，原事件与原因会保留在比赛记录中。");
+        if (!reason?.trim()) return;
+        isSubmitting = true;
+        applyControlState();
+        try {
+            const response = await fetch(`/api/scorekeeper/game/${gameId}/events/${eventId}/reverse`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }}},
+                body: JSON.stringify({reason})
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "撤销失败");
+            showToast(result.message);
+            await loadState(true);
+        } catch (error) {
+            showToast(error.message, true);
+        } finally {
+            isSubmitting = false;
+            applyControlState();
+        }
+    }
+
+    async function endGame() {
+        if (state && Number(state.game.home_score) === Number(state.game.away_score)) {
+            showToast("当前比分相同，必须继续比赛直至决出胜负", true);
+            return;
+        }
+        if (!confirm("确认结束本场比赛？结束后的数据将写入最终统计。")) return;
+        isSubmitting = true;
+        applyControlState();
+        try {
+            const response = await fetch(`/api/scorekeeper/game/${gameId}/end`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} }
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || "结束比赛失败");
+            }
+            showToast(result.message || "比赛已结束");
+            await loadState(true);
+        } catch (error) {
+            showToast(error.message, true);
+        } finally {
+            isSubmitting = false;
+            applyControlState();
+        }
+    }
+
+    document.addEventListener("click", (event) => {
+        const button = event.target.closest(".score-action");
+        if (!button) return;
+        const playerId = Number(button.dataset.playerId);
+        const action = button.dataset.action;
+        const value = Number(button.dataset.value);
+        const playerName = button.dataset.playerName;
+        if (button.dataset.shotRequired === "true") {
+            openShotModal(playerId, action, value, playerName, Number(button.dataset.made || 1));
+        } else {
+            sendAction(playerId, action, value, playerName);
+        }
+    });
+
+    document.getElementById("shotLocationSvg").addEventListener("click", handleShotCourtClick);
+    document.getElementById("confirmShotLocationButton").addEventListener("click", confirmShotLocation);
+    document.getElementById("cancelShotLocationButton").addEventListener("click", resetShotModal);
+
+    document.addEventListener("change", (event) => {
+        if (event.target.matches(".on-court-check")) {
+            handleLineupChange(event.target);
+        }
+    });
+
+    document.getElementById("clockButton").addEventListener("click", updateClock);
+    document.getElementById("periodInput").addEventListener("change", (event) => {
+        const period = Number(event.target.value);
+        const minutesInput = document.getElementById("clockMinutes");
+        const maximumMinutes = period <= 4 ? 12 : 5;
+        minutesInput.max = maximumMinutes;
+        const overtimeError = overtimeEntryError(period, 300);
+        if (overtimeError) {
+            showToast(overtimeError, true);
+            event.target.value = state.game.period;
+            minutesInput.max = Number(state.game.period) <= 4 ? 12 : 5;
+            return;
+        }
+        if (state && state.game && period > Number(state.game.period)) {
+            minutesInput.value = maximumMinutes;
+            document.getElementById("clockSeconds").value = 0;
+            return;
+        }
+        if (Number(minutesInput.value) > maximumMinutes) {
+            minutesInput.value = maximumMinutes;
+            document.getElementById("clockSeconds").value = 0;
+        }
+    });
+    document.getElementById("startGameButton").addEventListener("click", startGame);
+    document.getElementById("endGameButton").addEventListener("click", endGame);
+
+    loadState();
+    window.setInterval(loadState, 5000);
+</script>
+
+<style>
+    .score-value {
+        line-height: 1;
+        letter-spacing: 0;
+    }
+    .score-action {
+        min-width: 42px;
+    }
+    .table th,
+    .table td {
+        white-space: nowrap;
+    }
+    .card-header {
+        background: rgba(255, 255, 255, 0.03);
+        border-bottom: 1px solid var(--card-border);
+    }
+    .shot-location-court svg {
+        width: 100%;
+        height: auto;
+        cursor: crosshair;
+        border-radius: 8px;
+        background: #c58b4a;
+    }
+    .shot-court-bg {
+        fill: transparent;
+    }
+    .shot-court-line {
+        fill: none;
+        stroke: #5a3a1d;
+        stroke-width: 2;
+        vector-effect: non-scaling-stroke;
+    }
+</style>
+{% endblock %}

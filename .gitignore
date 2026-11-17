@@ -1,0 +1,12 @@
+/.venv/
+/.venv-windows/
+/.idea/
+/.docx_qa/
+/.ppt-build/
+/ppt_sql_rendered*/
+__pycache__/
+*.py[cod]
+*.inspect.ndjson
+.env
+.env.*
+*.local.ps1

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}数据总览 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="page-heading mb-4">
+    <h1 class="h3 mb-1">数据总览</h1>
+    <div class="text-secondary small">球队战绩、得分王与效率榜</div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body py-3">
+                <div class="text-secondary small">球队数量</div>
+                <div class="h3 mb-0">{{ standings | length }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body py-3">
+                <div class="text-secondary small">战绩领跑球队</div>
+                <div class="h5 mb-0">{{ standings[0].name if standings else "-" }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body py-3">
+                <div class="text-secondary small">场均得分王</div>
+                <div class="h5 mb-0">{{ scorers[0].name if scorers else "-" }}</div>
+                <div class="small text-primary">{{ scorers[0].ppg if scorers else "0" }} 分</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body py-3">
+                <div class="text-secondary small">效率榜第一</div>
+                <div class="h5 mb-0">{{ efficient_players[0].name if efficient_players else "-" }}</div>
+                <div class="small text-primary">{{ efficient_players[0].efficiency if efficient_players else "0" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="mb-4">
+    <h2 class="h6 mb-3">球队战绩排名</h2>
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">排名</th>
+                        <th scope="col">球队</th>
+                        <th scope="col">场次</th>
+                        <th scope="col">胜</th>
+                        <th scope="col">负</th>
+                        <th scope="col" data-bs-toggle="tooltip" title="胜场数 / 总场次">胜率</th>
+                        <th scope="col">场均得分</th>
+                        <th scope="col">场均失分</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in standings %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td class="text-nowrap">
+                            <span class="fw-semibold">{{ row.name }}</span>
+                            <span class="text-secondary">({{ row.abbreviation }})</span>
+                        </td>
+                        <td>{{ row.games_played }}</td>
+                        <td>{{ row.wins }}</td>
+                        <td>{{ row.games_played - row.wins }}</td>
+                        <td>
+                            {% if row.games_played %}
+                            <span class="badge {{ 'text-bg-success' if row.wins >= row.games_played / 2 else 'text-bg-danger' }}">
+                                {{ ((row.wins / row.games_played) * 100) | round(1) }}%
+                            </span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">0%</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ (row.points_for / row.games_played) | round(1) if row.games_played else '-' }}</td>
+                        <td>{{ (row.points_against / row.games_played) | round(1) if row.games_played else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">暂无战绩数据</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <h2 class="h6 mb-3">场均得分榜</h2>
+        <div class="card shadow-sm h-100">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">排名</th>
+                            <th scope="col">球员</th>
+                            <th scope="col">球队</th>
+                            <th scope="col">场次</th>
+                            <th scope="col">场均</th>
+                            <th scope="col">总分</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for player in scorers %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td class="text-nowrap fw-semibold">{{ player.name }}</td>
+                            <td>{{ player.abbreviation }}</td>
+                            <td>{{ player.games_played }}</td>
+                            <td class="fw-semibold text-success">{{ player.ppg }}</td>
+                            <td>{{ player.total_points }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">暂无球员数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <h2 class="h6 mb-3">球员效率榜</h2>
+        <div class="card shadow-sm h-100">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">排名</th>
+                            <th scope="col">球员</th>
+                            <th scope="col">球队</th>
+                            <th scope="col">场次</th>
+                            <th scope="col" data-bs-toggle="tooltip" title="得分 + 篮板 + 助攻 + 抢断 + 盖帽 - 投失 - 失误">效率值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for player in efficient_players %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td class="text-nowrap fw-semibold">{{ player.name }}</td>
+                            <td>{{ player.abbreviation }}</td>
+                            <td>{{ player.games_played }}</td>
+                            <td class="fw-semibold text-primary">{{ player.efficiency }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">暂无效率数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

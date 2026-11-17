@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} · 球队主页{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='my-team.css') }}">
+<div class="my-team">
+    <header class="team-home-header mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <span class="team-home-mark" aria-hidden="true">{{ team.abbreviation }}</span>
+            <div>
+                <div class="team-home-kicker mb-1">{{ season }} 赛季 · 球队主页</div>
+                <h1 class="h2 mb-1">{{ team.city }} {{ team.name }}</h1>
+                <div class="text-secondary">{{ team.arena }}{% if coach %} · 主教练 {{ coach.name }}{% endif %}</div>
+            </div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('teams', season=season) }}">联盟球队目录 <i class="bi bi-arrow-up-right ms-1" aria-hidden="true"></i></a>
+    </header>
+
+    {% set played = standings.games_played if standings else 0 %}
+    {% set wins = standings.wins if standings else 0 %}
+    <dl class="team-season-metrics mb-4">
+        <div class="card card-body">
+            <dt>赛季战绩</dt><dd>{{ wins }} 胜 {{ played - wins }} 负</dd>
+            <span class="text-secondary small">{{ played }} 场完赛{% if played %} · 胜率 {{ (wins * 100 / played) | round(1) }}%{% endif %}</span>
+        </div>
+        <div class="card card-body">
+            <dt>场均得分</dt><dd>{{ "%.1f"|format(standings.points_for / played) if played else "—" }}</dd>
+            <span class="text-secondary small">本赛季已完赛</span>
+        </div>
+        <div class="card card-body">
+            <dt>场均失分</dt><dd>{{ "%.1f"|format(standings.points_against / played) if played else "—" }}</dd>
+            <span class="text-secondary small">本赛季已完赛</span>
+        </div>
+        <div class="card card-body">
+            <dt>当前阵容</dt><dd>{{ roster_count }} 人</dd>
+            <a class="small" href="{{ url_for('team_detail', team_id=team.id, season=season) }}">查看球员与合同</a>
+        </div>
+    </dl>
+
+    <section aria-labelledby="team-matches" class="mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h2 class="h5 mb-0" id="team-matches">本队比赛</h2>
+            <a href="{{ url_for('games', team=team.id, season=season) }}" class="btn btn-sm btn-outline-secondary">全部本队比赛 <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+        </div>
+        <div class="row g-3">
+            <div class="col-xl-5">
+                <article class="card card-body team-match-feature h-100">
+                    {% set featured = live[0] if live else upcoming[0] if upcoming else None %}
+                    {% if featured %}
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <h3 class="h6 mb-0">{{ '比赛进行中' if live else '下一场比赛' }}</h3>
+                        <span class="text-secondary small">{{ featured.game_date }} · {{ featured.side }}</span>
+                    </div>
+                    <div class="team-match-pair">
+                        <div><span>{{ team.abbreviation }}</span><strong>{{ team.name }}</strong></div>
+                        <span class="team-match-score">{{ featured.team_score ~ ' : ' ~ featured.opponent_score if live else 'VS' }}</span>
+                        <div><span>{{ featured.opponent_abbr }}</span><strong>{{ featured.opponent }}</strong></div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-auto">
+                        <a class="btn btn-primary btn-sm" href="{{ url_for('analysis_reports.overview', game_id=featured.id, kind='scout', team=team.id) }}">赛前分析与首发</a>
+                        <a class="btn {{ 'btn-primary' if live else 'btn-outline-secondary' }} btn-sm" href="{{ url_for('game_detail', game_id=featured.id) }}">{{ '查看实时比分' if live else '比赛详情' }}</a>
+                    </div>
+                    {% else %}
+                    <h3 class="h6">下一场比赛</h3>
+                    <p class="text-secondary mb-0">该赛季暂无待开始比赛。</p>
+                    {% endif %}
+                </article>
+            </div>
+            <div class="col-xl-7">
+                <div class="card h-100">
+                    <div class="card-header bg-transparent py-3"><h3 class="h6 mb-0">待开始赛程</h3></div>
+                    {% if upcoming %}
+                    <ul class="list-group list-group-flush">
+                        {% for match in upcoming %}
+                        <li class="list-group-item team-match-row d-flex align-items-center justify-content-between flex-wrap gap-2 py-3">
+                            <div>
+                                <div class="fw-semibold">对阵 {{ match.opponent }} <span class="text-secondary small fw-normal">{{ match.opponent_abbr }}</span></div>
+                                <div class="text-secondary small">{{ match.game_date }} · {{ match.side }}</div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analysis_reports.overview', game_id=match.id, kind='scout', team=team.id) }}">赛前分析</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="card-body text-secondary">该赛季暂无待开始赛程。</div>
+                    {% endif %}
+                    {% if live | length > 1 %}
+                    <div class="card-footer bg-transparent">
+                        {% for match in live[1:] %}
+                        <a class="me-3" href="{{ url_for('game_detail', game_id=match.id) }}">进行中 · {{ match.opponent }} {{ match.team_score }} : {{ match.opponent_score }}</a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-3 mb-4">
+        <section class="col-xl-7" aria-labelledby="recent-team-games">
+            <div class="card h-100">
+                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="recent-team-games">最近完赛与复盘</h2></div>
+                {% if recent %}
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th scope="col">日期</th><th scope="col">对手</th><th scope="col">本队比分</th><th scope="col" class="text-end">报告</th></tr></thead>
+                        <tbody>
+                            {% for match in recent %}
+                            {% set win = match.team_score > match.opponent_score %}
+                            <tr>
+                                <td class="text-nowrap">{{ match.game_date }}</td>
+                                <th scope="row" class="fw-medium">{{ match.opponent }} <span class="text-secondary small fw-normal">{{ match.side }}</span></th>
+                                <td class="text-nowrap"><span class="{{ 'text-success-emphasis' if win else 'text-danger-emphasis' }} me-1">{{ '胜' if win else '负' }}</span>{{ match.team_score }} : {{ match.opponent_score }}</td>
+                                <td class="text-end text-nowrap"><a href="{{ url_for('analysis_reports.overview', game_id=match.id, kind='review', team=team.id) }}">赛后复盘</a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="card-body text-secondary">该赛季暂无已完赛数据。</div>
+                {% endif %}
+            </div>
+        </section>
+        <section class="col-xl-5" aria-labelledby="team-score-trend">
+            <div class="card h-100">
+                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="team-score-trend">近期得失分走势</h2></div>
+                <div class="card-body">
+                    {% if trend | length > 1 %}
+                    <div class="team-score-chart">
+                        <canvas id="ownTeamTrend" role="img" aria-label="{{ team.name }}近期得分与失分趋势，数值同最近完赛的比分表"></canvas>
+                    </div>
+                    {% else %}
+                    <p class="text-secondary mb-0">至少需要两场已完赛才能显示走势。</p>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="row g-3">
+        <section class="col-xl-7" aria-labelledby="team-leaders">
+            <div class="card h-100">
+                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="team-leaders">当前阵容得分榜</h2></div>
+                {% if leaders %}
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th scope="col">球员</th><th scope="col">位置</th><th scope="col">场均分</th><th scope="col">场均篮板</th><th scope="col">场均助攻</th></tr></thead>
+                        <tbody>
+                            {% for player in leaders %}
+                            <tr><th scope="row" class="fw-medium">{{ player.name }}</th><td>{{ player.position }}</td><td>{{ player.ppg }}</td><td>{{ player.rpg }}</td><td>{{ player.apg }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="card-body text-secondary">当前阵容暂无该赛季的本队完赛统计。</div>
+                {% endif %}
+            </div>
+        </section>
+        <section class="col-xl-5" aria-labelledby="team-operations">
+            <div class="card h-100">
+                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="team-operations">球队运营</h2></div>
+                <div class="card-body">
+                    <dl class="d-grid team-operation-metrics mb-3">
+                        <div><dt>本赛季总薪资</dt><dd>${{ "{:,}".format(payroll) }}</dd></div>
+                        <div><dt>工资帽空间</dt><dd class="{{ 'text-danger-emphasis' if cap and cap_space < 0 else '' }}">{{ '$' ~ "{:,}".format(cap_space) if cap else '—' }}</dd></div>
+                    </dl>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('team_detail', team_id=team.id, season=season) }}">阵容与合同</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('free_agency', season=season) }}">自由市场</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('trade_machine', season=season) }}">交易模拟器</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+{% if trend | length > 1 %}
+<script>
+    (() => {
+        const trend = {{ trend | tojson }};
+        const chart = document.getElementById("ownTeamTrend");
+        if (!window.Chart) return;
+        const colors = getComputedStyle(document.documentElement);
+        const fontColor = colors.getPropertyValue("--bs-secondary-color").trim();
+        const accent = colors.getPropertyValue("--bs-primary-text-emphasis").trim();
+        const second = colors.getPropertyValue("--bs-warning-text-emphasis").trim();
+        const grid = colors.getPropertyValue("--bs-border-color").trim();
+        new Chart(chart, {
+            type: "line",
+            data: {
+                labels: trend.map(match => match.date),
+                datasets: [
+                    { label: "得分", data: trend.map(match => match.scored), borderColor: accent, backgroundColor: accent, tension: 0.25 },
+                    { label: "失分", data: trend.map(match => match.allowed), borderColor: second, backgroundColor: second, tension: 0.25 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: { legend: { labels: { color: fontColor, usePointStyle: true } } },
+                scales: {
+                    x: { ticks: { color: fontColor }, grid: { display: false } },
+                    y: { ticks: { color: fontColor }, grid: { color: grid } }
+                }
+            }
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}

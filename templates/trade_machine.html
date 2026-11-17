@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}交易模拟器 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="page-heading mb-4">
+    <h1 class="h3 mb-1">发起球员交易</h1>
+    <div class="text-secondary small">只能代表自己的球队发出方案，对方管理层接受后交易才会执行</div>
+</div>
+
+{% with assistant_description="自动从其他球队查找最多三套一换一方案，结合比赛表现、阵容位置和双方配平条件。", assistant_button="生成交易方案" %}
+{% include "_roster_assistant.html" %}
+{% endwith %}
+
+<div class="row g-3 align-items-end mb-4">
+    <div class="col-md-5">
+        <label class="form-label">我方球队</label>
+        <div class="form-control bg-body-secondary">
+            {{ own_team.city }} {{ own_team.name }} ({{ own_team.abbreviation }})
+        </div>
+    </div>
+    <div class="col-md-5">
+        <label for="teamBSelect" class="form-label">接收方案的球队</label>
+        <select class="form-select" id="teamBSelect">
+            {% for team in teams %}
+            <option value="{{ team.id }}">{{ team.city }} {{ team.name }} ({{ team.abbreviation }})</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header text-bg-primary d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">我方可送出球员</span>
+                <span class="small" id="teamAOutgoing">换出 $0</span>
+            </div>
+            <div class="card-body">
+                <div class="text-secondary small mb-3">勾选球员加入拟换出筹码</div>
+                <div id="teamAPlayers" class="player-checklist"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header text-bg-danger d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">希望对方送出的球员</span>
+                <span class="small" id="teamBOutgoing">换出 $0</span>
+            </div>
+            <div class="card-body">
+                <div class="text-secondary small mb-3">勾选球员加入拟换出筹码</div>
+                <div id="teamBPlayers" class="player-checklist"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-body text-center p-4">
+        <button class="btn btn-primary btn-lg" id="validateTradeButton">
+            <i class="bi bi-shield-check me-1"></i>校验交易合法性
+        </button>
+        <button class="btn btn-outline-primary btn-lg" type="button" id="tradeAnalysisButton">
+            分析交易方案
+        </button>
+        <button class="btn btn-success btn-lg d-none" id="sendTradeButton">
+            <i class="bi bi-send me-1"></i>发送交易方案
+        </button>
+        <div id="tradeResult" class="mt-4 text-start"></div>
+        <div id="tradeAnalysis" class="text-start" aria-live="polite"></div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='decision-analysis.js') }}"></script>
+<script>
+    const ownTeamId = {{ own_team.id }};
+    const tradeSeason = {{ season | tojson }};
+    const tradeCsrfToken = {{ csrf_token() | tojson }};
+    let teamAPlayers = [];
+    let teamBPlayers = [];
+    let lastTradePayload = null;
+    let lastValidation = null;
+    let isExecuting = false;
+
+    function formatMoney(value) {
+        return "$" + Number(value || 0).toLocaleString("en-US");
+    }
+
+    async function loadTeamPlayers(side) {
+        const teamId = side === "A" ? ownTeamId : document.getElementById("teamBSelect").value;
+        const container = document.getElementById(side === "A" ? "teamAPlayers" : "teamBPlayers");
+        container.innerHTML = '<div class="text-muted py-3">加载中...</div>';
+        const response = await fetch(`/api/teams/${teamId}/players?season=${encodeURIComponent(tradeSeason)}`);
+        const players = await response.json();
+        if (side === "A") teamAPlayers = players;
+        else teamBPlayers = players;
+        renderPlayers(side);
+    }
+
+    function renderPlayers(side) {
+        const players = side === "A" ? teamAPlayers : teamBPlayers;
+        const container = document.getElementById(side === "A" ? "teamAPlayers" : "teamBPlayers");
+        container.innerHTML = "";
+        players.forEach((player) => {
+            const label = document.createElement("label");
+            label.className = "d-flex align-items-center gap-2 py-2 border-bottom";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input trade-check";
+            checkbox.dataset.playerId = player.id;
+            checkbox.dataset.salary = player.salary;
+            checkbox.dataset.side = side;
+            checkbox.addEventListener("change", updateOutgoing);
+            const text = document.createElement("span");
+            text.className = "small";
+            text.textContent = `${player.name} · ${player.position} · ${formatMoney(player.salary)}`;
+            label.appendChild(checkbox);
+            label.appendChild(text);
+            container.appendChild(label);
+        });
+        updateOutgoing();
+    }
+
+    function updateOutgoing() {
+        ["A", "B"].forEach((side) => {
+            const boxes = document.querySelectorAll(`.trade-check[data-side="${side}"]`);
+            const total = Array.from(boxes)
+                .filter((box) => box.checked)
+                .reduce((sum, box) => sum + Number(box.dataset.salary), 0);
+            document.getElementById(side === "A" ? "teamAOutgoing" : "teamBOutgoing").textContent = "换出 " + formatMoney(total);
+        });
+        document.getElementById("tradeResult").innerHTML = "";
+        document.getElementById("tradeAnalysis").textContent = "";
+        document.getElementById("sendTradeButton").classList.add("d-none");
+        lastTradePayload = null;
+        lastValidation = null;
+    }
+
+    function selectedPlayerIds(side) {
+        return Array.from(document.querySelectorAll(`.trade-check[data-side="${side}"]:checked`))
+            .map((box) => Number(box.dataset.playerId));
+    }
+
+    function buildTradePayload() {
+        return {
+            team1_id: ownTeamId,
+            team2_id: Number(document.getElementById("teamBSelect").value),
+            season: tradeSeason,
+            team1_outgoing_player_ids: selectedPlayerIds("A"),
+            team2_outgoing_player_ids: selectedPlayerIds("B")
+        };
+    }
+
+    async function validateTrade() {
+        const payload = buildTradePayload();
+        const response = await fetch("/api/trades/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        lastTradePayload = payload;
+        lastValidation = result;
+        renderTradeResult(result, false);
+        document.getElementById("sendTradeButton").classList.toggle("d-none", !result.is_valid);
+        return result;
+    }
+
+    async function sendTradeProposal() {
+        if (isExecuting || !lastValidation || !lastValidation.is_valid || !lastTradePayload) return;
+        isExecuting = true;
+        const button = document.getElementById("sendTradeButton");
+        button.disabled = true;
+        try {
+            const response = await fetch("/api/trade-proposals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+                body: JSON.stringify(lastTradePayload)
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                renderTradeResult({ is_valid: false, reasons: result.reasons || [result.error || "发送交易方案失败"] }, false);
+                return;
+            }
+            const box = document.getElementById("tradeResult");
+            box.className = "alert alert-success mt-4 text-start";
+            box.innerHTML = `<strong>${result.message}</strong> <a href="/trade-proposals" class="alert-link ms-2">查看交易记录</a>`;
+            lastTradePayload = null;
+            lastValidation = null;
+            button.classList.add("d-none");
+        } finally {
+            isExecuting = false;
+            button.disabled = false;
+        }
+    }
+
+    function renderTradeResult(result, executed = false) {
+        const box = document.getElementById("tradeResult");
+        box.classList.remove("alert", "alert-success", "alert-danger");
+        box.classList.add("alert", result.is_valid ? "alert-success" : "alert-danger");
+        box.innerHTML = "";
+        if (result.is_valid) {
+            box.innerHTML = "<strong>方案符合 NBA CBA 配平规则，可以发送给对方管理层。</strong>";
+        } else {
+            const list = document.createElement("ul");
+            list.className = "mb-0";
+            result.reasons.forEach((reason) => {
+                const item = document.createElement("li");
+                item.textContent = reason;
+                list.appendChild(item);
+            });
+            box.appendChild(list);
+        }
+    }
+
+    document.getElementById("teamBSelect").addEventListener("change", () => loadTeamPlayers("B"));
+    document.getElementById("validateTradeButton").addEventListener("click", validateTrade);
+    const tradeAnalysisButton = document.getElementById("tradeAnalysisButton");
+    const tradeAnalysisBox = document.getElementById("tradeAnalysis");
+    tradeAnalysisButton.addEventListener("click", () => {
+        const payload = buildTradePayload();
+        if (!payload.team1_outgoing_player_ids.length || !payload.team2_outgoing_player_ids.length) {
+            tradeAnalysisBox.textContent = "请为双方各选择至少一名拟交易球员。";
+            return;
+        }
+        requestDecisionAnalysis("/api/trades/analysis", payload, {{ csrf_token() | tojson }},
+            tradeAnalysisButton, tradeAnalysisBox, () => JSON.stringify(payload) === JSON.stringify(buildTradePayload()));
+    });
+    document.getElementById("sendTradeButton").addEventListener("click", sendTradeProposal);
+    bindRosterAssistant({
+        endpoint: "/api/trades/recommendations",
+        season: tradeSeason,
+        csrfToken: tradeCsrfToken,
+        applyLabel: "应用并发送申请",
+        apply: async (plan) => {
+            if (!confirm(`${plan.title}\n${plan.subtitle}\n确认向对方管理层发送交易申请？`)) return null;
+            if (isExecuting) throw new Error("已有交易申请正在发送。");
+            isExecuting = true;
+            try {
+                return await postRosterDecision("/api/trade-proposals", plan.payload, tradeCsrfToken);
+            } finally {
+                isExecuting = false;
+            }
+        }
+    });
+
+    loadTeamPlayers("A");
+    loadTeamPlayers("B");
+</script>
+
+<style>
+    .player-checklist {
+        max-height: 520px;
+        overflow-y: auto;
+    }
+    .trade-check {
+        flex: 0 0 auto;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,553 @@
+{% extends "base.html" %}
+
+{% block title %}自由市场 - NBA 球队管理系统{% endblock %}
+
+{% block content %}
+<div class="page-heading mb-4">
+    <h1 class="h3 mb-1">自由市场目标池与报价沙盘</h1>
+    <div class="text-secondary small">管理自由球员优先级，并实时模拟合同对薪资帽和奢侈税的影响</div>
+</div>
+
+{% with assistant_description="自动从自由市场查找最多三名候选，给出轮换适配理由和可提交的合同报价。", assistant_button="生成签约方案" %}
+{% include "_roster_assistant.html" %}
+{% endwith %}
+
+<form class="row g-3 align-items-end mb-4" method="get">
+    <div class="col-md-5">
+        <label for="team_id" class="form-label">当前管理球队</label>
+        <select class="form-select" id="team_id" name="team_id" disabled>
+            {% for team in teams %}
+            <option value="{{ team.id }}" {% if active_team_id == team.id %}selected{% endif %}>
+                {{ team.name }} ({{ team.abbreviation }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-5">
+        <label for="addPlayerId" class="form-label">添加自由球员目标</label>
+        <select class="form-select" id="addPlayerId">
+            {% for player in players %}
+            <option value="{{ player.id }}">{{ player.name }} · {{ player.team_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2">
+        <button type="button" class="btn btn-primary w-100" id="addTargetButton">
+            <i class="bi bi-plus-lg me-1"></i>添加目标
+        </button>
+    </div>
+</form>
+
+<div class="row g-4">
+    <div class="col-xl-8">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card shadow-sm kanban-column" data-tier="Tier 1">
+                    <div class="card-header text-bg-danger d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">Tier 1 必争目标</span>
+                        <span class="badge text-bg-light" data-count="Tier 1">0</span>
+                    </div>
+                    <div class="card-body kanban-list" data-tier="Tier 1"></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm kanban-column" data-tier="MLE Target">
+                    <div class="card-header text-bg-warning d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">MLE 中产特例目标</span>
+                        <span class="badge text-bg-light" data-count="MLE Target">0</span>
+                    </div>
+                    <div class="card-body kanban-list" data-tier="MLE Target"></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm kanban-column" data-tier="Vet Min">
+                    <div class="card-header text-bg-info d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">底薪 / 边缘补充</span>
+                        <span class="badge text-bg-light" data-count="Vet Min">0</span>
+                    </div>
+                    <div class="card-body kanban-list" data-tier="Vet Min"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">合同报价沙盘</span>
+                <span class="small text-secondary">实时演算</span>
+            </div>
+            <div class="card-body p-4">
+                <div id="selectedTarget" class="mb-3">
+                    <div class="text-secondary small">当前目标</div>
+                    <div class="h6 mb-0" id="sandboxPlayerName">请选择左侧球员</div>
+                    <div class="text-secondary small" id="sandboxPlayerMeta"></div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label d-block">合同年限</label>
+                    <div class="btn-group w-100" role="group" id="yearsGroup">
+                        {% for year in range(1, 5) %}
+                        <input type="radio" class="btn-check" name="years" id="year{{ year }}" value="{{ year }}" {% if year == 1 %}checked{% endif %}>
+                        <label class="btn btn-outline-primary" for="year{{ year }}">{{ year }} 年</label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="salaryRange" class="form-label">首年年薪</label>
+                    <input type="range" class="form-range" id="salaryRange" min="1200000" max="60000000" step="100000" value="15000000">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="salaryNumber" min="1200000" max="60000000" step="100000" value="15000000">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="increaseSelect" class="form-label">年递增幅度</label>
+                    <select class="form-select" id="increaseSelect">
+                        <option value="0">固定年薪</option>
+                        <option value="0.05" selected>5%（按首年年薪递增）</option>
+                        <option value="0.08">8%（鸟权）</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="exceptionSelect" class="form-label">签约特例</label>
+                    <select class="form-select" id="exceptionSelect">
+                        <option value="Standard">标准合同</option>
+                        <option value="Full MLE">全额中产特例</option>
+                        <option value="BAE">双年特例</option>
+                    </select>
+                </div>
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="teamOption">
+                    <label class="form-check-label" for="teamOption">球队选项</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="playerOption">
+                    <label class="form-check-label" for="playerOption">球员选项</label>
+                </div>
+
+                <div class="card bg-transparent border mb-3">
+                    <div class="card-body py-3">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-secondary small">合同总额</span>
+                            <strong id="totalValue">$0</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-secondary small">全期均薪 AAV</span>
+                            <strong id="aavValue">$0</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-secondary small">预计薪资帽空间</span>
+                            <strong id="capSpace">$0</strong>
+                        </div>
+                        <div class="progress mt-3" style="height: 8px;">
+                            <div class="progress-bar" id="capProgress" role="progressbar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="validationBox" class="d-none"></div>
+
+                <button class="btn btn-outline-primary w-100 mb-2" type="button" id="signingAnalysisButton">
+                    分析签约方案
+                </button>
+                <div id="signingAnalysis" class="text-start mb-2" aria-live="polite"></div>
+                <button class="btn btn-primary w-100" id="saveOfferButton">
+                    <i class="bi bi-save me-1"></i>保存报价
+                </button>
+                <button class="btn btn-success w-100 mt-2" id="signPlayerButton" disabled>
+                    <i class="bi bi-person-check me-1"></i>按已保存报价签约
+                </button>
+                <p id="offerStatus" class="small text-secondary mt-2 mb-0" aria-live="polite">请先保存报价，再确认签约。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="{{ url_for('static', filename='decision-analysis.js') }}"></script>
+<script>
+    const teamConfig = {
+        teamId: {{ active_team_id or "null" }},
+        season: "{{ season }}",
+        payroll: {{ payroll }},
+        capAmount: {{ cap.cap_amount if cap else 0 }},
+        luxuryTaxLine: {{ cap.luxury_tax_line if cap else 0 }}
+    };
+
+    let currentTargetId = null;
+    let currentTargetPlayerId = null;
+    let currentTier = null;
+    let savedDraft = null;
+    let signing = false;
+
+    function formatMoney(value) {
+        return "$" + Number(value || 0).toLocaleString("en-US");
+    }
+
+    function getSelectedYears() {
+        return Number(document.querySelector('input[name="years"]:checked').value);
+    }
+
+    function getSalary() {
+        return Number(document.getElementById("salaryNumber").value) || 0;
+    }
+
+    function calculateCapHits() {
+        const years = getSelectedYears();
+        const first = getSalary();
+        const increase = Number(document.getElementById("increaseSelect").value);
+        const hits = [];
+        for (let k = 0; k < years; k++) {
+            hits.push(Math.round(first * (1 + k * increase)));
+        }
+        return hits;
+    }
+
+    function updateSandboxMetrics() {
+        document.getElementById("signingAnalysis").textContent = "";
+        const hits = calculateCapHits();
+        const total = hits.reduce((sum, value) => sum + value, 0);
+        const aav = Math.round(total / hits.length);
+        document.getElementById("totalValue").textContent = formatMoney(total);
+        document.getElementById("aavValue").textContent = formatMoney(aav);
+        const capSpace = teamConfig.capAmount - teamConfig.payroll - hits[0];
+        document.getElementById("capSpace").textContent = formatMoney(capSpace);
+        const used = Math.max(0, teamConfig.payroll + hits[0]);
+        document.getElementById("capProgress").style.width = Math.min(100, used / teamConfig.capAmount * 100) + "%";
+        document.getElementById("capProgress").className = "progress-bar " + (used > teamConfig.luxuryTaxLine ? "bg-danger" : "bg-success");
+        updateOfferStatus();
+    }
+
+    document.getElementById("salaryRange").addEventListener("input", (event) => {
+        document.getElementById("salaryNumber").value = event.target.value;
+        updateSandboxMetrics();
+    });
+    document.getElementById("salaryNumber").addEventListener("input", (event) => {
+        document.getElementById("salaryRange").value = event.target.value;
+        updateSandboxMetrics();
+    });
+    document.getElementById("yearsGroup").addEventListener("change", updateSandboxMetrics);
+    document.getElementById("increaseSelect").addEventListener("change", updateSandboxMetrics);
+    document.getElementById("exceptionSelect").addEventListener("change", updateSandboxMetrics);
+    document.getElementById("teamOption").addEventListener("change", updateOfferStatus);
+    document.getElementById("playerOption").addEventListener("change", updateOfferStatus);
+
+    function renderTargets(targets) {
+        document.querySelectorAll(".kanban-list").forEach((list) => list.innerHTML = "");
+        targets.forEach((target) => {
+            const list = document.querySelector(`.kanban-list[data-tier="${target.tier}"]`);
+            if (!list) return;
+            const card = document.createElement("div");
+            card.className = "target-card text-start";
+            card.dataset.targetId = target.id;
+            card.dataset.playerId = target.player_id;
+            card.dataset.tier = target.tier;
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="fw-semibold target-name"></div>
+                        <div class="small text-secondary target-position"></div>
+                        ${target.offer_id ? '<div class="small text-primary target-offer"></div>' : ""}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger target-delete" data-target-id="${target.id}" aria-label="移除目标">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            `;
+            card.querySelector(".target-name").textContent = target.player_name;
+            card.querySelector(".target-position").textContent = `${target.position} · ${target.team_name}`;
+            if (target.offer_id) {
+                card.querySelector(".target-offer").textContent = `${target.status || "Draft"} · ${formatMoney(target.year1_salary)}`;
+            }
+            card.addEventListener("click", () => selectTarget(target));
+            card.querySelector(".target-delete").addEventListener("click", async (event) => {
+                event.stopPropagation();
+                await removeTarget(target.id);
+            });
+            list.appendChild(card);
+        });
+        updateCounts();
+    }
+
+    async function removeTarget(targetId) {
+        const response = await fetch(`/api/free-agency/targets/${targetId}`, {
+            method: "DELETE",
+            headers: { "X-CSRF-Token": {{ csrf_token() | tojson }} }
+        });
+        if (response.ok) {
+            showToast("目标已移除");
+            if (currentTargetId === targetId) {
+                currentTargetId = null;
+                currentTargetPlayerId = null;
+                savedDraft = null;
+                updateOfferStatus();
+                signingAnalysisBox.textContent = "";
+            }
+            loadTargets();
+        } else {
+            const result = await response.json();
+            showToast(result.error || "移除失败");
+        }
+    }
+
+    function updateCounts() {
+        document.querySelectorAll("[data-count]").forEach((badge) => {
+            const tier = badge.dataset.count;
+            badge.textContent = document.querySelectorAll(`.target-card[data-tier="${tier}"]`).length;
+        });
+    }
+
+    function selectTarget(target) {
+        currentTargetId = target.id;
+        currentTargetPlayerId = target.player_id;
+        currentTier = target.tier;
+        document.getElementById("sandboxPlayerName").textContent = target.player_name;
+        document.getElementById("sandboxPlayerMeta").textContent = `${target.position} · ${target.team_name}`;
+        const yearsRadio = document.getElementById("year" + (target.years || 1));
+        if (yearsRadio) yearsRadio.checked = true;
+        document.getElementById("salaryNumber").value = target.year1_salary ?? 15000000;
+        document.getElementById("salaryRange").value = target.year1_salary ?? 15000000;
+        const rate = Number(target.annual_increase_pct ?? 0.05);
+        const increaseSelect = document.getElementById("increaseSelect");
+        if (![...increaseSelect.options].some(option => Number(option.value) === rate)) {
+            increaseSelect.add(new Option(`${rate * 100}%`, rate));
+        }
+        increaseSelect.value = rate;
+        document.getElementById("teamOption").checked = Boolean(target.team_option);
+        document.getElementById("playerOption").checked = Boolean(target.player_option);
+        document.getElementById("exceptionSelect").value = target.exception_type || "Standard";
+        savedDraft = target.offer_id && target.offer_season === teamConfig.season
+            ? {id: target.offer_id, version: target.offer_version, signature: JSON.stringify(draftTerms())} : null;
+        updateSandboxMetrics();
+        document.getElementById("validationBox").classList.add("d-none");
+    }
+
+    async function loadTargets() {
+        const response = await fetch(`/api/free-agency/targets?season=${encodeURIComponent(teamConfig.season)}`);
+        const targets = await response.json();
+        renderTargets(targets);
+        if (targets.length && !currentTargetId) {
+            selectTarget(targets[0]);
+        }
+    }
+
+    const signingAnalysisButton = document.getElementById("signingAnalysisButton");
+    const signingAnalysisBox = document.getElementById("signingAnalysis");
+
+    function signingTerms() {
+        return {
+            target_id: currentTargetId,
+            season: teamConfig.season,
+            years: getSelectedYears(),
+            year1_salary: getSalary(),
+            exception_type: document.getElementById("exceptionSelect").value
+        };
+    }
+
+    signingAnalysisButton.addEventListener("click", () => {
+        if (!currentTargetId) {
+            signingAnalysisBox.textContent = "请先选择一名招募目标。";
+            return;
+        }
+        const payload = signingTerms();
+        requestDecisionAnalysis("/api/free-agency/analysis", payload, {{ csrf_token() | tojson }},
+            signingAnalysisButton, signingAnalysisBox, () => JSON.stringify(payload) === JSON.stringify(signingTerms()));
+    });
+
+    function draftTerms() {
+        return {
+            ...signingTerms(),
+            annual_increase_pct: Number(document.getElementById("increaseSelect").value),
+            team_option: document.getElementById("teamOption").checked,
+            player_option: document.getElementById("playerOption").checked,
+            status: "Draft"
+        };
+    }
+
+    function updateOfferStatus() {
+        const ready = Boolean(savedDraft && savedDraft.signature === JSON.stringify(draftTerms()));
+        document.getElementById("signPlayerButton").disabled = signing || !ready;
+        document.getElementById("offerStatus").textContent = ready
+            ? "将按已保存报价的年限、逐年薪资和选项签约。"
+            : "请先保存当前报价，再确认签约。";
+    }
+
+    async function saveOffer() {
+        if (!currentTargetId) return;
+        const payload = draftTerms();
+        const response = await fetch("/api/free-agency/offers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        const box = document.getElementById("validationBox");
+        box.classList.remove("d-none", "alert-danger", "alert-success", "alert-warning");
+        if (!response.ok) {
+            box.classList.add("alert", "alert-danger");
+            box.textContent = result.error || "保存失败";
+        } else {
+            box.classList.add("alert", result.is_valid ? "alert-success" : "alert-danger");
+            box.innerHTML = "";
+            result.errors.forEach((message) => {
+                const div = document.createElement("div");
+                div.textContent = message;
+                box.appendChild(div);
+            });
+            result.warnings.forEach((message) => {
+                const div = document.createElement("div");
+                div.textContent = message;
+                box.appendChild(div);
+            });
+            if (result.is_valid) {
+                box.prepend(Object.assign(document.createElement("div"), { textContent: "报价已保存，首年沙盘校验通过" }));
+            }
+            if (payload.target_id === currentTargetId) {
+                savedDraft = result.is_valid ? {
+                    id: result.offer_id, version: result.offer_version, signature: JSON.stringify(payload)
+                } : null;
+                updateOfferStatus();
+            }
+            showToast("报价沙盘已更新");
+            loadTargets();
+        }
+    }
+
+    async function signPlayer() {
+        if (signing || !currentTargetPlayerId || !savedDraft || savedDraft.signature !== JSON.stringify(draftTerms())) return;
+        const years = calculateCapHits().map((salary, i) => `第 ${i + 1} 年 ${formatMoney(salary)}`).join("\n");
+        const option = document.getElementById("teamOption").checked ? "球队选项" :
+            document.getElementById("playerOption").checked ? "球员选项" : "无选项";
+        const type = document.getElementById("exceptionSelect").selectedOptions[0].textContent;
+        if (!confirm(`确认签约 ${document.getElementById("sandboxPlayerName").textContent}？\n${years}\n${type} · ${option}`)) return;
+        signing = true;
+        updateOfferStatus();
+        try {
+            const result = await postRosterDecision(`/api/players/${currentTargetPlayerId}/sign`, {
+                offer_id: savedDraft.id,
+                offer_version: savedDraft.version,
+                season: teamConfig.season
+            }, {{ csrf_token() | tojson }});
+            showToast(result.message || "签约成功");
+            setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+            showToast(error.message || "签约失败");
+        } finally {
+            signing = false;
+            updateOfferStatus();
+        }
+    }
+
+    function showToast(message) {
+        const toast = document.createElement("div");
+        toast.className = "toast align-items-center text-bg-success border-0";
+        toast.innerHTML = '<div class="d-flex"><div class="toast-body"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+        toast.querySelector(".toast-body").textContent = message;
+        document.getElementById("toastContainer").appendChild(toast);
+        new bootstrap.Toast(toast).show();
+    }
+
+    async function addTarget() {
+        const playerId = document.getElementById("addPlayerId").value;
+        const tier = document.querySelector('.kanban-column.active')?.dataset.tier || "MLE Target";
+        const response = await fetch("/api/free-agency/targets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+            body: JSON.stringify({ player_id: Number(playerId), tier })
+        });
+        if (response.ok) {
+            showToast("目标已添加");
+            loadTargets();
+        } else {
+            const result = await response.json();
+            showToast(result.error || "添加失败");
+        }
+    }
+
+    document.getElementById("addTargetButton").addEventListener("click", addTarget);
+    document.getElementById("saveOfferButton").addEventListener("click", saveOffer);
+    document.getElementById("signPlayerButton").addEventListener("click", signPlayer);
+    bindRosterAssistant({
+        endpoint: "/api/free-agency/recommendations",
+        season: teamConfig.season,
+        csrfToken: {{ csrf_token() | tojson }},
+        applyLabel: "应用并确认签约",
+        apply: async (plan) => {
+            const sampleNote = plan.profiles[0].reliable ? "" : "\n该球员的比赛样本不足，请核对后签约。";
+            if (!confirm(`${plan.title}\n${plan.subtitle}${sampleNote}\n确认按以上合同正式签约？`)) return null;
+            const {player_id, ...terms} = plan.payload;
+            const result = await postRosterDecision(`/api/players/${player_id}/sign`, terms, {{ csrf_token() | tojson }});
+            setTimeout(() => window.location.reload(), 700);
+            return result;
+        }
+    });
+
+    document.querySelectorAll(".kanban-list").forEach((list) => {
+        new Sortable(list, {
+            group: "free-agency",
+            animation: 150,
+            onEnd: async () => {
+                const items = [];
+                document.querySelectorAll(".kanban-list").forEach((column) => {
+                    const tier = column.dataset.tier;
+                    column.querySelectorAll(".target-card").forEach((card, index) => {
+                        items.push({
+                            target_id: Number(card.dataset.targetId),
+                            tier,
+                            priority_order: index
+                        });
+                    });
+                });
+                const response = await fetch("/api/free-agency/reorder", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRF-Token": {{ csrf_token() | tojson }} },
+                    body: JSON.stringify({ items })
+                });
+                if (response.ok) {
+                    showToast("目标优先级已更新");
+                    loadTargets();
+                } else {
+                    showToast("更新失败");
+                    loadTargets();
+                }
+            }
+        });
+    });
+
+    updateSandboxMetrics();
+    loadTargets();
+</script>
+
+<style>
+    .kanban-column {
+        min-height: 520px;
+    }
+    .kanban-list {
+        min-height: 420px;
+    }
+    .target-card {
+        width: 100%;
+        border: 1px solid var(--card-border);
+        background: rgba(255, 255, 255, 0.035);
+        color: inherit;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        cursor: grab;
+    }
+    .target-card:active {
+        cursor: grabbing;
+    }
+    .target-card:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+    }
+</style>
+{% endblock %}
