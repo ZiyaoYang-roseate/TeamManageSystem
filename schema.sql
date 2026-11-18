@@ -1,3 +1,6 @@
+DROP TABLE IF EXISTS draft_board;
+DROP TABLE IF EXISTS draft_prospects;
+DROP TABLE IF EXISTS league_game_reviews;
 DROP TABLE IF EXISTS game_analysis_reports;
 DROP TABLE IF EXISTS game_analysis_snapshots;
 DROP TABLE IF EXISTS game_player_availability;
@@ -30,7 +33,8 @@ CREATE TABLE teams (
     name VARCHAR(80) NOT NULL,
     abbreviation VARCHAR(3) NOT NULL UNIQUE,
     founded_year SMALLINT NOT NULL,
-    arena VARCHAR(100) NOT NULL
+    arena VARCHAR(100) NOT NULL,
+    archived_at TIMESTAMP NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE users (
@@ -65,6 +69,7 @@ CREATE TABLE players (
     weight_kg DECIMAL(5, 2) NOT NULL,
     nationality VARCHAR(50) NOT NULL,
     salary INT NOT NULL,
+    archived_at TIMESTAMP NULL,
     CONSTRAINT fk_players_team FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE SET NULL,
     UNIQUE KEY uq_team_jersey (team_id, jersey_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -286,6 +291,47 @@ CREATE TABLE draft_picks (
     protection VARCHAR(50) NOT NULL,
     status VARCHAR(20) NOT NULL,
     CONSTRAINT fk_draft_team FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE draft_prospects (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    draft_year SMALLINT NOT NULL,
+    name VARCHAR(80) NOT NULL,
+    position VARCHAR(20) NOT NULL,
+    source VARCHAR(120) NOT NULL,
+    games SMALLINT UNSIGNED NOT NULL,
+    minutes SMALLINT UNSIGNED NOT NULL,
+    assists DECIMAL(5,2) NOT NULL,
+    turnovers DECIMAL(5,2) NOT NULL,
+    rebounds DECIMAL(5,2) NOT NULL,
+    threes DECIMAL(5,2) NOT NULL,
+    observation VARCHAR(500) NOT NULL,
+    UNIQUE KEY uq_draft_prospect (draft_year, name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE draft_board (
+    team_id INT NOT NULL,
+    prospect_id INT NOT NULL,
+    priority SMALLINT UNSIGNED NOT NULL,
+    role_note VARCHAR(120) NOT NULL,
+    notes VARCHAR(600) NOT NULL,
+    PRIMARY KEY (team_id, prospect_id),
+    FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE,
+    FOREIGN KEY (prospect_id) REFERENCES draft_prospects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE league_game_reviews (
+    game_id INT PRIMARY KEY,
+    status VARCHAR(16) NOT NULL,
+    finding VARCHAR(500) NOT NULL,
+    resolution VARCHAR(500) NOT NULL DEFAULT '',
+    opened_by INT NULL,
+    resolved_by INT NULL,
+    opened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP NULL,
+    FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
+    FOREIGN KEY (opened_by) REFERENCES users (id) ON DELETE SET NULL,
+    FOREIGN KEY (resolved_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE free_agency_targets (

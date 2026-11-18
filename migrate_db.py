@@ -128,7 +128,7 @@ def populate_business_dates(cursor):
         """
         INSERT IGNORE INTO scorekeeper_business_dates (season, business_date)
         SELECT season,
-               COALESCE(MIN(CASE WHEN status <> 'finished' THEN game_date END), MAX(game_date))
+               COALESCE(MIN(CASE WHEN status IN ('scheduled', 'live') THEN game_date END), MAX(game_date))
         FROM games GROUP BY season
         """
     )
@@ -187,6 +187,18 @@ def migrate_confirmed_contracts_and_event_corrections(cursor):
         )
 
 
+def migrate_team_planning(cursor):
+    tables = {"draft_prospects", "draft_board", "league_game_reviews"}
+    for statement in schema_statements():
+        if statement.startswith("CREATE TABLE ") and statement.split()[2] in tables:
+            cursor.execute(statement.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1))
+
+
+def migrate_archive(cursor):
+    add_column(cursor, "players", "archived_at", "TIMESTAMP NULL")
+    add_column(cursor, "teams", "archived_at", "TIMESTAMP NULL")
+
+
 def migrate(connection):
     with connection.cursor() as cursor:
         cursor.execute("SELECT GET_LOCK(CONCAT('nba-migrate:', LEFT(SHA2(DATABASE(), 256), 48)), 10) AS acquired")
@@ -208,6 +220,8 @@ def migrate(connection):
                 (3, migrate_game_analysis), (4, migrate_pregame),
                 (5, migrate_starter_gate),
                 (6, migrate_confirmed_contracts_and_event_corrections),
+                (7, migrate_team_planning),
+                (8, migrate_archive),
             ]:
                 if version not in installed:
                     upgrade(cursor)

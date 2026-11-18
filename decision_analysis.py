@@ -86,7 +86,7 @@ def analyze_signing(team_id, target_id, terms):
         if player["team_id"] is not None:
             raise BusinessError("球员已不在自由市场", 409)
         rules = validate_and_calculate_offer(team_id, player["id"], terms, cursor=cursor)
-        cursor.execute("SELECT id, name, position FROM players WHERE team_id = %s ORDER BY id", (team_id,))
+        cursor.execute("SELECT id, name, position FROM players WHERE team_id = %s AND archived_at IS NULL ORDER BY id", (team_id,))
         roster = cursor.fetchall()
         profiles = player_profiles(cursor, [player, *roster], terms["season"])
         candidate, peers = profiles[0], [row for row in profiles[1:] if row["position"] == player["position"]]
@@ -120,14 +120,14 @@ def analyze_trade(payload):
     team_id = payload["team1_id"]
     with transaction() as connection, connection.cursor() as cursor:
         validation = validate_trade(payload, cursor)
-        cursor.execute("SELECT id, name, position FROM players WHERE team_id = %s ORDER BY id", (team_id,))
+        cursor.execute("SELECT id, name, position FROM players WHERE team_id = %s AND archived_at IS NULL ORDER BY id", (team_id,))
         roster = cursor.fetchall()
         incoming_ids = payload["team2_outgoing_player_ids"]
         incoming = []
         if incoming_ids and payload["team2_id"] != team_id:
             placeholders = ", ".join(["%s"] * len(incoming_ids))
             cursor.execute(
-                f"SELECT id, name, position FROM players WHERE team_id = %s AND id IN ({placeholders}) ORDER BY id",
+                f"SELECT id, name, position FROM players WHERE team_id = %s AND archived_at IS NULL AND id IN ({placeholders}) ORDER BY id",
                 (payload["team2_id"], *incoming_ids),
             )
             incoming = cursor.fetchall()

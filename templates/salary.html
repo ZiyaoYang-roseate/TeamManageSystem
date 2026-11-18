@@ -1,181 +1,108 @@
 {% extends "base.html" %}
-
-{% block title %}薪资合同 - NBA 球队管理系统{% endblock %}
-
+{% block title %}薪资与阵容规划{% endblock %}
 {% block content %}
-<div id="serverSearchScope" data-search-scope="all-contracts" hidden></div>
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+{% macro money(value) %}${{ "{:,}".format(value) }}{% endmacro %}
+<header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
     <div>
-        <h1 class="h3 mb-1">薪资帽与合同管理</h1>
-        <div class="text-secondary small">球队薪资空间、奢侈税压力与合同选项</div>
+        <h1 class="h3 mb-1">薪资与阵容规划</h1>
+        <span class="text-secondary">{{ team.name }} · 本队工作区</span>
     </div>
-</div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary" href="{{ url_for('free_agency', season=season) }}">比较签约预算</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('trade_machine', season=season) }}">比较交易预算</a>
+    </div>
+</header>
 
-<div class="row g-4 mb-4">
-    <div class="col-md-6 col-xl-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="text-secondary small">工资帽</div>
-                <div class="h4 mb-0">${{ "{:,}".format(cap.cap_amount) }}</div>
-            </div>
+<section id="packages" class="border-top pt-3 mb-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+            <h2 class="h5 mb-1">组合补强</h2>
+            <p class="small text-secondary mb-0">先用交易调整轮换，再用交易后预算拟一份自由市场合同。</p>
         </div>
+        <form method="post" action="{{ url_for('salary', season=season) }}#packages">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary">生成组合方案</button>
+        </form>
     </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="text-secondary small">奢侈税线</div>
-                <div class="h4 mb-0">${{ "{:,}".format(cap.luxury_tax_line) }}</div>
+    {% if recommendations %}
+        {% if recommendations.plans %}
+        <p class="small text-secondary">{{ "AI 整理" if recommendations.source == "model" else "规则整理" }} · 本队对照样本 {{ recommendations.team_sample }} 场。{{ recommendations.needs | join(' ') }}</p>
+        {% endif %}
+        {% for plan in recommendations.plans %}
+        <article class="card card-body mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                    <h3 class="h6 mb-1">{{ plan.title }}</h3>
+                    <div class="small text-secondary">{{ plan.opponent }}</div>
+                    <div><strong>交易后</strong> {{ plan.subtitle }}</div>
+                </div>
+                <form method="post" action="{{ url_for('apply_roster_package') }}" onsubmit="return confirm('确认发送交易申请？对方同意后，由你确认后续签约。');">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="token" value="{{ plan.token }}">
+                    <button class="btn btn-outline-primary">应用并发送交易</button>
+                </form>
             </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="text-secondary small">薪资帽内球队</div>
-                <div class="h4 mb-0">{{ teams | selectattr('over_cap', 'equalto', 0) | list | length }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="text-secondary small">奢侈税球队</div>
-                <div class="h4 mb-0">{{ teams | selectattr('luxury_tax', 'greaterthan', 0) | list | length }}</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<section class="mb-5">
-    <h2 class="h5 mb-3">球队薪资空间</h2>
-    <div class="card shadow-sm">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th scope="col">球队</th>
-                        <th scope="col">总薪资</th>
-                        <th scope="col">剩余空间</th>
-                        <th scope="col">超帽金额</th>
-                        <th scope="col">预计奢侈税</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for team in teams %}
-                    <tr>
-                        <td class="fw-semibold text-nowrap">{{ team.name }} ({{ team.abbreviation }})</td>
-                        <td>${{ "{:,}".format(team.payroll) }}</td>
-                        <td class="text-success">${{ "{:,}".format(team.cap_space) }}</td>
-                        <td class="{{ 'text-danger' if team.over_cap else 'text-muted' }}">${{ "{:,}".format(team.over_cap) }}</td>
-                        <td class="{{ 'text-danger' if team.luxury_tax else 'text-muted' }}">${{ "{:,}".format(team.luxury_tax) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
-
-<div class="row g-4">
-    <div class="col-lg-8">
-        <h2 class="h5 mb-3">合同明细</h2>
-        <div class="card shadow-sm">
-            <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span class="small text-secondary">
-                    {% if search %}
-                        在全部合同中搜索“{{ search }}”，共找到 {{ total }} 条
-                    {% else %}
-                        按年薪降序展示全部合同，共 {{ total }} 条
-                    {% endif %}
-                </span>
-                {% if search %}
-                <a href="{{ url_for('salary', season=request.args.get('season', ''), per_page=per_page) }}" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-x-lg me-1"></i>清除搜索
-                </a>
-                {% endif %}
-            </div>
+            <ul class="small mt-3">
+                <li><strong>比赛用法</strong> {{ plan.value.summary }}。{{ plan.value.usage }}</li>
+                <li><strong>数据与取舍</strong> {{ plan.value.court }} {{ plan.value.tradeoff }}</li>
+                <li><strong>后续签约</strong> {{ plan.signing_notes | join(' ') }}</li>
+                <li><strong>验证</strong> {{ plan.value.verify }}</li>
+            </ul>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>球员</th>
-                            <th>球队</th>
-                            <th>合同类型</th>
-                            <th>年限</th>
-                            <th>首年年薪</th>
-                            <th>状态</th>
-                            <th>选项</th>
-                        </tr>
-                    </thead>
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>赛季</th><th>维持现状</th><th>仅交易后</th><th>交易并签约</th><th>组合完成后距税线</th><th>组合后有合同的位置</th></tr></thead>
                     <tbody>
-                        {% for contract in contracts %}
-                        <tr>
-                            <td class="fw-semibold text-nowrap">{{ contract.player_name }}</td>
-                            <td>{{ contract.team_name }}</td>
-                            <td>{{ contract.contract_type }}</td>
-                            <td>{{ contract.start_year }} - {{ contract.end_year }}</td>
-                            <td>${{ "{:,}".format(contract.annual_salary) }}
-                                {% if contract.annual_increase_pct %}<div class="small text-secondary">每年增加首年年薪的 {{ (contract.annual_increase_pct * 100) | round(2) }}%</div>{% endif %}
-                            </td>
-                            <td>{{ {"Active": "有效", "Waived": "已裁撤"}.get(contract.status, contract.status) }}</td>
-                            <td>
-                                {% if contract.player_option %}<span class="badge text-bg-warning">PO</span>{% endif %}
-                                {% if contract.team_option %}<span class="badge text-bg-info">TO</span>{% endif %}
-                            </td>
-                        </tr>
+                        {% for row in plan.budget %}
+                        <tr><th scope="row">{{ row.season }}</th><td>{{ money(row.current.payroll) }}</td><td>{{ money(row.alternate.payroll) }}</td>
+                            <td>{{ money(row.projected.payroll) }}</td><td>{{ money(row.cap.luxury_tax_line - row.projected.payroll) if row.cap else "未公布" }}</td>
+                            <td>{% for position, total in row.projected.depth | dictsort %}{{ position }} {{ total }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-        </div>
-        {% include "_pagination.html" %}
-    </div>
-    <div class="col-lg-4">
-        <h2 class="h5 mb-3">交易模拟器</h2>
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <p class="text-secondary small">按 25% 薪资匹配规则快速检查两笔合同的匹配度。</p>
-                <div class="mb-3">
-                    <label for="trade-a" class="form-label">送出球员</label>
-                    <select class="form-select" id="trade-a" onchange="updateTradeCheck()">
-                        <option value="">请选择</option>
-                        {% for contract in trade_contracts %}
-                        <option value="{{ contract.player_id }}" data-salary="{{ contract.annual_salary }}">{{ contract.player_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="trade-b" class="form-label">接收球员</label>
-                    <select class="form-select" id="trade-b" onchange="updateTradeCheck()">
-                        <option value="">请选择</option>
-                        {% for contract in trade_contracts %}
-                        <option value="{{ contract.player_id }}" data-salary="{{ contract.annual_salary }}">{{ contract.player_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="trade-result" class="alert alert-secondary mb-0">选择两名球员后显示结果。</div>
-            </div>
-        </div>
-    </div>
+        </article>
+        {% else %}
+        <p class="text-secondary mb-0">{{ recommendations.message }}</p>
+        {% endfor %}
+    {% endif %}
+</section>
+
+<h2 class="h5">未来三季预算</h2>
+<div class="table-responsive mb-4">
+    <table class="table table-hover align-middle">
+        <thead><tr><th>赛季</th><th>按现有合同</th><th>选项均不执行</th><th>工资帽空间</th><th>距税线</th><th>仍有合同的位置</th></tr></thead>
+        <tbody>
+        {% for row in years %}
+        <tr>
+            <th scope="row">{{ row.season }}</th>
+            <td>{{ money(row.current.payroll) }}</td>
+            <td>{{ money(row.current.without_options) }}</td>
+            <td>{{ money(row.cap.cap_amount - row.current.payroll) if row.cap else "未公布" }}</td>
+            <td>{{ money(row.cap.luxury_tax_line - row.current.payroll) if row.cap else "未公布" }}</td>
+            <td>{% for position, total in row.current.depth | dictsort %}{{ position }} {{ total }}{% if not loop.last %} · {% endif %}{% else %}无合同覆盖{% endfor %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p class="small text-secondary">选项按合同最后一年模拟。工资帽空间和距税线按现有合同计算，负数表示超额。</p>
 </div>
 
-<script>
-function updateTradeCheck() {
-    const a = document.getElementById("trade-a");
-    const b = document.getElementById("trade-b");
-    const result = document.getElementById("trade-result");
-    if (!a.value || !b.value) {
-        result.className = "alert alert-secondary mb-0";
-        result.textContent = "选择两名球员后显示结果。";
-        return;
-    }
-    const salaryA = Number(a.options[a.selectedIndex].dataset.salary);
-    const salaryB = Number(b.options[b.selectedIndex].dataset.salary);
-    const diff = Math.abs(salaryA - salaryB);
-    const rate = Math.max(salaryA, salaryB) === 0 ? 0 : diff / Math.max(salaryA, salaryB) * 100;
-    const valid = rate <= 25;
-    result.className = "alert mb-0 " + (valid ? "alert-success" : "alert-danger");
-    result.textContent = "薪资差额 " + rate.toFixed(1) + "%，" + (valid ? "符合 25% 匹配规则" : "超出 25% 匹配规则");
-}
-</script>
+<h2 class="h5">有效合同与到期安排</h2>
+<div class="table-responsive">
+    <table class="table table-hover align-middle">
+        <thead><tr><th>球员</th><th>位置</th><th>合同年度</th><th>首年薪资</th><th>年涨幅</th><th>末年选项</th></tr></thead>
+        <tbody>
+        {% for contract in contracts %}
+        <tr>
+            <th scope="row">{{ contract.name }}</th><td>{{ contract.position }}</td>
+            <td>{{ contract.start_year }} 至 {{ contract.end_year }}</td><td>{{ money(contract.annual_salary) }}</td>
+            <td>{{ (contract.annual_increase_pct * 100) | round(2) }}%</td>
+            <td>{{ "球队选项" if contract.team_option else "球员选项" if contract.player_option else "—" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-secondary">本队暂无有效合同。</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

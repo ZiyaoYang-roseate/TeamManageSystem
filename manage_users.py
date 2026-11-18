@@ -40,7 +40,7 @@ def main():
             if cursor.fetchone():
                 parser.error("账号已存在，使用 --reset-password 重置密码")
             if args.team is not None:
-                cursor.execute("SELECT id FROM teams WHERE id = %s FOR UPDATE", (args.team,))
+                cursor.execute("SELECT id FROM teams WHERE id = %s AND archived_at IS NULL FOR UPDATE", (args.team,))
                 if not cursor.fetchone():
                     parser.error("球队不存在")
                 cursor.execute("SELECT username FROM users WHERE team_id = %s", (args.team,))

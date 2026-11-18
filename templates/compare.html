@@ -1,118 +1,179 @@
 {% extends "base.html" %}
-
 {% block title %}球员对比 - NBA 球队管理系统{% endblock %}
-
 {% block content %}
-<div class="page-heading mb-4">
-    <h1 class="h3 mb-1">球员对比</h1>
-    <div class="text-secondary small">并排比较基础数据、高阶效率与投篮热区命中率</div>
-</div>
+{% macro stat(value, pct=false) %}{% if value is none %}—{% else %}{{ "%.1f" | format(value) }}{{ "%" if pct else "" }}{% endif %}{% endmacro %}
+{% macro gap(value, pct=false) %}{% if value is none %}—{% elif value == 0 %}持平{% else %}{{ "%+.1f" | format(value) }}{{ " 个百分点" if pct else "" }}{% endif %}{% endmacro %}
+{% macro shot(row, total) %}
+{% if row.attempts %}
+<div class="fw-semibold">{{ stat(row.player_pct, true) }} <span class="small fw-normal text-secondary">{{ row.made }}/{{ row.attempts }}</span></div>
+<div class="compare-shot-track" aria-hidden="true"><span style="width: {{ (100 * row.attempts / total) | round(1) }}%"></span></div>
+<div class="small text-secondary">{{ (100 * row.attempts / total) | round(1) }}% 出手占比{% if row.attempts < 10 %} · 小样本{% endif %}</div>
+{% else %}<span class="small text-secondary">无出手记录</span>{% endif %}
+{% endmacro %}
+<link rel="stylesheet" href="{{ url_for('static', filename='player-compare.css') }}">
 
-<form class="row g-3 align-items-end mb-4" method="get">
-    <div class="col-md-5">
-        <label for="player1_id" class="form-label">球员 A</label>
-        <select class="form-select" id="player1_id" name="player1_id">
-            {% for player in players %}
-            <option value="{{ player.id }}" {% if player1_id == player.id %}selected{% endif %}>
-                {{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})
-            </option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-5">
-        <label for="player2_id" class="form-label">球员 B</label>
-        <select class="form-select" id="player2_id" name="player2_id">
-            {% for player in players %}
-            <option value="{{ player.id }}" {% if player2_id == player.id %}selected{% endif %}>
-                {{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})
-            </option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-2">
-        <button type="submit" class="btn btn-primary w-100">开始对比</button>
-    </div>
-</form>
+<div class="player-compare">
+    <header class="mb-3 d-flex align-items-baseline justify-content-between flex-wrap gap-2">
+        <h1 class="h3 mb-0">球员对比</h1>
+        <a href="{{ url_for('players', season=season) }}" class="small">浏览球员档案</a>
+    </header>
 
-<div class="row g-4 mb-4">
-    {% for player in [player1, player2] %}
-    <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-body p-4">
-                {% if player %}
-                <div class="d-flex justify-content-between align-items-start mb-4">
-                    <div>
-                        <div class="h4 mb-1">{{ player.name }}</div>
-                        <div class="text-secondary">{{ player.team_name }} ({{ player.abbreviation }}) · {{ player.position }}</div>
-                    </div>
-                    <span class="badge text-bg-primary">#{{ player.age }}</span>
-                </div>
-                <div class="row text-center g-3">
-                    <div class="col-4">
-                        <div class="text-secondary small">场均得分</div>
-                        <div class="h4 mb-0">{{ player.ppg or "-" }}</div>
-                    </div>
-                    <div class="col-4">
-                        <div class="text-secondary small">场均篮板</div>
-                        <div class="h4 mb-0">{{ player.rpg or "-" }}</div>
-                    </div>
-                    <div class="col-4">
-                        <div class="text-secondary small">场均助攻</div>
-                        <div class="h4 mb-0">{{ player.apg or "-" }}</div>
-                    </div>
-                    <div class="col-4">
-                        <div class="text-secondary small">TS%</div>
-                        <div class="h4 mb-0">{{ player.ts_percent or "-" }}%</div>
-                    </div>
-                    <div class="col-4">
-                        <div class="text-secondary small">总正负值</div>
-                        <div class="h4 mb-0 {{ 'text-success' if player.plus_minus and player.plus_minus > 0 else 'text-danger' }}">{{ player.plus_minus or "-" }}</div>
-                    </div>
-                    <div class="col-4">
-                        <div class="text-secondary small">每 48 分钟净效率</div>
-                        <div class="h4 mb-0">{{ player.net_rating_per48 or "-" }}</div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="text-muted py-5 text-center">请选择球员</div>
+    <form class="compare-pickers mb-4" method="get">
+        <input type="hidden" name="mode" value="{{ mode }}">
+        <div class="row g-3 align-items-end">
+            {% for side, selected in [('A', player1), ('B', player2)] %}
+            {% set name = "player1_id" if side == "A" else "player2_id" %}
+            <div class="col-md-5">
+                <label for="{{ name }}" class="form-label"><span class="compare-marker" data-side="{{ side }}">{{ side }}</span> 球员 {{ side }}</label>
+                <input type="search" class="form-control form-control-sm mb-2" aria-label="搜索球员 {{ side }}" placeholder="搜索姓名、球队或位置" data-options-for="{{ name }}" hidden>
+                <select class="form-select" name="{{ name }}" id="{{ name }}" required>
+                    <option value="" disabled{% if not selected %} selected{% endif %}>选择球员</option>
+                    {% for player in players %}
+                    <option value="{{ player.id }}"{% if selected and selected.id == player.id %} selected{% endif %}>{{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }}) · {{ player.position }}</option>
+                    {% endfor %}
+                </select>
+                <div class="small text-secondary mt-1" data-option-status="{{ name }}" aria-live="polite"></div>
+            </div>
+            {% endfor %}
+            <div class="col-md-2">
+                <label for="compareSeason" class="form-label">赛季</label>
+                <select id="compareSeason" name="season" class="form-select">
+                    {% for item in seasons %}<option value="{{ item }}"{% if item == season %} selected{% endif %}>{{ item }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit">开始对比</button>
+                {% if sides %}
+                <a class="btn btn-outline-secondary" href="{{ url_for('compare_players', player1_id=player2.id, player2_id=player1.id, season=season, mode=mode) }}">交换 A / B</a>
                 {% endif %}
             </div>
         </div>
-    </div>
-    {% endfor %}
-</div>
+    </form>
+    {% if error %}
+    <div class="alert alert-warning" role="status">{{ error }}</div>
+    {% elif not sides %}
+    <p class="text-secondary">选择两名球员后查看对比。</p>
+    {% endif %}
 
-<div class="card shadow-sm">
-    <div class="card-body p-4">
-        <h2 class="h6 mb-3">投篮热区对比</h2>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>区域</th>
-                        <th>{{ player1.name if player1 else "球员 A" }} 命中率</th>
-                        <th>{{ player1.name if player1 else "球员 A" }} 命中/出手</th>
-                        <th>{{ player2.name if player2 else "球员 B" }} 命中率</th>
-                        <th>{{ player2.name if player2 else "球员 B" }} 命中/出手</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for index in range(zones1 | length) %}
-                    <tr>
-                        <td class="fw-semibold">{{ zones1[index].zone }}</td>
-                        <td class="{{ 'text-danger' if zones1[index].diff > 0 else 'text-primary' }}">{{ "%.1f"|format(zones1[index].player_pct) }}%</td>
-                        <td>{{ zones1[index].made }}/{{ zones1[index].attempts }}</td>
-                        <td class="{{ 'text-danger' if zones2[index].diff > 0 else 'text-primary' }}">{{ "%.1f"|format(zones2[index].player_pct) }}%</td>
-                        <td>{{ zones2[index].made }}/{{ zones2[index].attempts }}</td>
-                    </tr>
+    {% if sides %}
+    <section class="compare-identities mb-4" aria-label="两名球员及其样本">
+        {% for side in sides %}
+        {% set player = side.player %}
+        <article class="compare-identity" data-side="{{ side.side }}">
+            <span class="compare-marker" data-side="{{ side.side }}">{{ side.side }}</span>
+            <div>
+                <h2 class="h5 mb-1">
+                    {% if current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+                    <a class="link-body-emphasis" href="{{ url_for('player_detail', player_id=player.id, season=season) }}">{{ player.name }}</a>
+                    {% else %}{{ player.name }}{% endif %}
+                </h2>
+                <div class="small text-secondary">{{ player.team_name }} · {{ player.position }} · {{ player.age }} 岁</div>
+                {% if side.summary %}
+                <div class="small mt-2">{{ side.summary.games }} 场 · 场均 {{ stat(side.summary.minutes) }} 分钟 · 总计 {{ stat(side.summary.total_minutes) }} 分钟</div>
+                {% else %}
+                <div class="small mt-2 text-secondary">{{ season }} 赛季暂无出场记录</div>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+
+    {% if cues %}
+    <section class="compare-cues mb-4" aria-labelledby="compare-insights">
+        <h2 id="compare-insights" class="h5 mb-3">值得进一步看</h2>
+        <ul class="mb-0">
+            {% for item in cues %}
+            <li><strong>{{ player1.name if item.side == 'A' else player2.name }}</strong> {{ "每 36 分钟" if mode == "per36" else "场均" }}{{ item.label }}多 {{ stat(item.gap) }}。{{ item.followup }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <section class="col-xl-8" aria-labelledby="box-title">
+            <div class="compare-panel h-100">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <h2 id="box-title" class="h5 mb-0">数据差异</h2>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="数据统计口径">
+                        {% for key, label in [('game', '场均'), ('per36', '每 36 分钟')] %}
+                        <a class="btn {{ 'btn-primary' if mode == key else 'btn-outline-primary' }}" href="{{ url_for('compare_players', player1_id=player1.id, player2_id=player2.id, season=season, mode=key) }}"{% if mode == key %} aria-current="true"{% endif %}>{{ label }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% if not comparable %}
+                <p class="small text-secondary">任一球员少于 3 场或 60 分钟时保留原数据，样本足够后才显示差值和比较提示。</p>
+                {% elif player1.position != player2.position %}
+                <p class="small text-secondary">两人登记位置不同。请结合轮换角色解读差异。</p>
+                {% endif %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th scope="col">指标</th><th scope="col">{{ player1.name }}</th><th scope="col">{{ player2.name }}</th><th scope="col">A − B</th></tr></thead>
+                        <tbody>
+                            {% for row in box_scores %}
+                            <tr>
+                                <th scope="row">{{ row.label }}</th>
+                                <td>{{ stat(row.first, row.percent) }}</td>
+                                <td>{{ stat(row.second, row.percent) }}</td>
+                                <td class="text-secondary text-nowrap">{{ gap(row.difference, row.percent) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-secondary mt-2 mb-0">统计范围为所选赛季已完赛的出场记录。命中率按总出手计算，每 36 分钟口径按总出场时间折算。</p>
+            </div>
+        </section>
+
+        <section class="col-xl-4" aria-labelledby="compare-recent-title">
+            <div class="compare-panel h-100">
+                <h2 id="compare-recent-title" class="h5 mb-3">近况</h2>
+                {% for side in sides %}
+                <section class="compare-recent">
+                    <h3 class="h6">{{ side.player.name }}{% if side.recent %} <span class="small text-secondary fw-normal">近 {{ side.recent.games }} 场</span>{% endif %}</h3>
+                    {% if side.recent %}
+                    <dl class="compare-recent-stats mb-1">
+                        <div><dt>得分</dt><dd>{{ stat(side.recent.points) }}</dd></div>
+                        <div><dt>篮板</dt><dd>{{ stat(side.recent.rebounds) }}</dd></div>
+                        <div><dt>助攻</dt><dd>{{ stat(side.recent.assists) }}</dd></div>
+                    </dl>
+                    {% if side.summary.games == side.recent.games %}
+                    <div class="small text-secondary">这几场已覆盖当前赛季样本。</div>
                     {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted py-4">暂无热区数据</td>
-                    </tr>
-                    {% endfor %}
+                    <div class="small text-secondary">赛季场均 {{ stat(side.summary.points) }} 分、{{ stat(side.summary.rebounds) }} 篮板、{{ stat(side.summary.assists) }} 助攻。</div>
+                    {% endif %}
+                    {% else %}
+                    <p class="small text-secondary mb-0">该赛季暂无比赛可比较。</p>
+                    {% endif %}
+                </section>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <section class="compare-panel mb-4" aria-labelledby="compare-shots-title">
+        <h2 id="compare-shots-title" class="h5 mb-2">投篮选择与效率</h2>
+        {% if sides[0].attempts or sides[1].attempts %}
+        <p class="small text-secondary">条形显示区域出手占比；命中率差只在双方该区域各有至少 10 次出手时显示。</p>
+        <div class="table-responsive">
+            <table class="table align-middle compare-shot-table mb-0">
+                <thead><tr><th scope="col">区域</th><th scope="col">{{ player1.name }} <span class="small text-secondary">{{ sides[0].attempts }} 次</span></th><th scope="col">{{ player2.name }} <span class="small text-secondary">{{ sides[1].attempts }} 次</span></th><th scope="col">A − B 命中率</th></tr></thead>
+                <tbody>
+                {% for zone in zones %}
+                <tr>
+                    <th scope="row">{{ zone.label }}</th>
+                    <td data-side="A">{{ shot(zone.first, sides[0].attempts) }}</td>
+                    <td data-side="B">{{ shot(zone.second, sides[1].attempts) }}</td>
+                    <td class="small text-secondary text-nowrap">{{ gap(zone.difference, true) }}</td>
+                </tr>
+                {% endfor %}
                 </tbody>
             </table>
         </div>
-    </div>
+        {% else %}
+        <p class="text-secondary mb-0">所选赛季暂无可用于分区对比的投篮落点。</p>
+        {% endif %}
+    </section>
+    {% endif %}
 </div>
+<script src="{{ url_for('static', filename='player-compare.js') }}" defer></script>
 {% endblock %}

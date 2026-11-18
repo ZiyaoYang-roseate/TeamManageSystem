@@ -81,7 +81,7 @@ def targets():
               AND (season = %s OR season IS NULL)
             ORDER BY season IS NOT NULL DESC, updated_at DESC, id DESC LIMIT 1
         )
-        WHERE fat.team_id = %s AND p.team_id IS NULL
+        WHERE fat.team_id = %s AND p.team_id IS NULL AND p.archived_at IS NULL
         ORDER BY fat.tier, fat.priority_order, fat.id
         """,
         (season, team_id),

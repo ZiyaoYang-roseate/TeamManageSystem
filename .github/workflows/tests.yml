@@ -13,3 +13,33 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements.txt
       - run: python -B -m unittest discover -s tests -v
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
+      MYSQL_USER: root
+      MYSQL_DATABASE: teammanage_ci_demo
+      NBA_RUN_MYSQL_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -B init_db.py --reset-demo
+      - run: python -B -m unittest discover -s tests -p test_mysql_delivery.py -v

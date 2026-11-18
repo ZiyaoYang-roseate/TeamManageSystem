@@ -11,7 +11,7 @@
             <div>
                 <div class="team-home-kicker mb-1">{{ season }} 赛季 · 球队主页</div>
                 <h1 class="h2 mb-1">{{ team.city }} {{ team.name }}</h1>
-                <div class="text-secondary">{{ team.arena }}{% if coach %} · 主教练 {{ coach.name }}{% endif %}</div>
+                <div class="text-secondary">{{ team.arena }}{% if coach %} · 主教练 {{ coach.name | chinese_name }}{% endif %}</div>
             </div>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('teams', season=season) }}">联盟球队目录 <i class="bi bi-arrow-up-right ms-1" aria-hidden="true"></i></a>
@@ -149,7 +149,7 @@
                         <thead><tr><th scope="col">球员</th><th scope="col">位置</th><th scope="col">场均分</th><th scope="col">场均篮板</th><th scope="col">场均助攻</th></tr></thead>
                         <tbody>
                             {% for player in leaders %}
-                            <tr><th scope="row" class="fw-medium">{{ player.name }}</th><td>{{ player.position }}</td><td>{{ player.ppg }}</td><td>{{ player.rpg }}</td><td>{{ player.apg }}</td></tr>
+                            <tr><th scope="row" class="fw-medium"><a href="{{ url_for('player_detail', player_id=player.id, season=season) }}">{{ player.name }}</a></th><td>{{ player.position }}</td><td>{{ player.ppg }}</td><td>{{ player.rpg }}</td><td>{{ player.apg }}</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

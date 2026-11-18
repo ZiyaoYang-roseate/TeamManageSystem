@@ -86,6 +86,9 @@ class ScorekeeperRuleTests(unittest.TestCase):
     def test_future_game_cannot_be_started(self):
         cursor = FakeCursor(
             fetch_one_rows=[
+                {"home_team_id": 1, "away_team_id": 2, "status": "scheduled"},
+                {"id": 1},
+                {"id": 2},
                 {
                     "id": 7,
                     "season": "2025-26",

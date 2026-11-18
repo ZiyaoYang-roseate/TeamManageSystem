@@ -156,6 +156,8 @@
                     分析签约方案
                 </button>
                 <div id="signingAnalysis" class="text-start mb-2" aria-live="polite"></div>
+                <button class="btn btn-outline-secondary w-100 mb-2" type="button" id="signingBudgetButton">比较逐年预算</button>
+                <div id="signingBudget" class="text-start mb-2" aria-live="polite"></div>
                 <button class="btn btn-primary w-100" id="saveOfferButton">
                     <i class="bi bi-save me-1"></i>保存报价
                 </button>
@@ -172,6 +174,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="{{ url_for('static', filename='decision-analysis.js') }}"></script>
+<script src="{{ url_for('static', filename='salary-preview.js') }}"></script>
 <script>
     const teamConfig = {
         teamId: {{ active_team_id or "null" }},
@@ -370,6 +373,10 @@
             status: "Draft"
         };
     }
+
+    bindBudgetPreview(document.getElementById("signingBudgetButton"), document.getElementById("signingBudget"),
+        {{ url_for('salary_preview', kind='signing') | tojson }}, {{ csrf_token() | tojson }},
+        () => currentTargetId ? draftTerms() : null);
 
     function updateOfferStatus() {
         const ready = Boolean(savedDraft && savedDraft.signature === JSON.stringify(draftTerms()));

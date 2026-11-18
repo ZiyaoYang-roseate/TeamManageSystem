@@ -18,41 +18,7 @@
 </div>
 
 {% if business_date %}
-<div class="card shadow-sm mb-4">
-    <div class="card-body">
-        <div class="row g-3 align-items-end">
-            <div class="col-lg">
-                <div class="fw-semibold mb-1"><i class="bi bi-calendar-check me-1"></i>系统业务比赛日</div>
-                <div class="text-secondary small">
-                    早于该日期的比赛必须已经结束；仅当天比赛可计分；未来比赛会锁定。比赛日只能向后推进。
-                </div>
-            </div>
-            <div class="col-lg-auto">
-                <form method="post" action="{{ url_for('scorekeeper_calendar_date') }}" class="d-flex flex-wrap gap-2 align-items-end">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="season" value="{{ season }}">
-                    <div>
-                        <label for="businessDateInput" class="form-label small mb-1">当前日期时间戳</label>
-                        <input
-                            id="businessDateInput"
-                            name="business_date"
-                            type="date"
-                            class="form-control form-control-sm"
-                            value="{{ business_date }}"
-                            min="{{ schedule_min_date }}"
-                            max="{{ schedule_max_date }}"
-                            required
-                        >
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-primary">
-                        <i class="bi bi-arrow-right-circle me-1"></i>推进比赛日
-                    </button>
-                </form>
-                <div class="text-secondary small mt-1">更新时间：{{ business_date_updated_at }}</div>
-            </div>
-        </div>
-    </div>
-</div>
+<p class="text-secondary small">仅当前比赛日可计分。比赛日由联赛运营管理员推进。更新时间：{{ business_date_updated_at }}</p>
 {% endif %}
 
 <div class="card shadow-sm">

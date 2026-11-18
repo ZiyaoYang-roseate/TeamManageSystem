@@ -16,7 +16,8 @@ HEALTH_LABELS = {
     "Day-to-Day": "每日观察", "Probable": "预计可出场",
 }
 GAME_SQL = """
-    SELECT g.id, g.season, g.game_date, g.status, g.starters_initialized, g.home_team_id, g.away_team_id,
+    SELECT g.id, g.season, g.game_date, g.status, g.period, g.seconds_remaining,
+           g.starters_initialized, g.home_team_id, g.away_team_id,
            g.home_score, g.away_score, ht.name AS home_team_name, at.name AS away_team_name
     FROM games g
     JOIN teams ht ON ht.id = g.home_team_id
@@ -401,7 +402,7 @@ def published_starters(cursor, game_id, *, lock=False, historical=False):
     cursor.execute(
         """
         SELECT s.team_id, p.id, p.name, p.position
-        FROM game_starters s JOIN players p ON p.id = s.player_id AND p.team_id = s.team_id
+        FROM game_starters s JOIN players p ON p.id = s.player_id AND p.team_id = s.team_id AND p.archived_at IS NULL
         LEFT JOIN game_player_availability a ON a.game_id = s.game_id AND a.player_id = s.player_id
         WHERE s.game_id = %s AND (a.status IS NULL OR a.team_id <> s.team_id OR a.status NOT IN ('injured', 'rest'))
         ORDER BY s.team_id, p.id
@@ -456,7 +457,7 @@ def load_evidence(game_id, team_id, kind):
             opponent = game["away_team_id"] if team_id == game["home_team_id"] else game["home_team_id"]
             stats, shots = _game_rows(cursor, [game_id], team_id)
             opponent_stats, opponent_shots = _game_rows(cursor, [game_id], opponent)
-            return build_review(game, team_id, events, stats + opponent_stats, shots + opponent_shots)
+            return build_review(game, team_id, events, [*stats, *opponent_stats], [*shots, *opponent_shots])
 
         opponent = game["away_team_id"] if team_id == game["home_team_id"] else game["home_team_id"]
         cursor.execute(
@@ -477,7 +478,7 @@ def load_evidence(game_id, team_id, kind):
                 LEFT JOIN player_health h ON h.player_id = p.id
                 LEFT JOIN game_player_availability a
                     ON a.game_id = %s AND a.player_id = p.id AND a.team_id = p.team_id
-                WHERE p.team_id = %s ORDER BY p.name, p.id
+                WHERE p.team_id = %s AND p.archived_at IS NULL ORDER BY p.name, p.id
                 """,
                 (game_id, opponent),
             )

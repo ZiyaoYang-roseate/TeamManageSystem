@@ -1,0 +1,41 @@
+.player-compare .compare-pickers,
+.player-compare .compare-panel,
+.player-compare .compare-cues {
+    border: 1px solid var(--bs-border-color);
+    border-radius: .8rem;
+    padding: 1rem;
+}
+.player-compare .compare-pickers { background: var(--bs-tertiary-bg); }
+.player-compare .compare-identities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.player-compare .compare-identity {
+    display: flex;
+    align-items: flex-start;
+    gap: .85rem;
+    padding: 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-inline-start: .26rem solid var(--side-color);
+    border-radius: .7rem;
+}
+.player-compare [data-side="A"] { --side-color: var(--bs-primary); --side-bg: var(--bs-primary-bg-subtle); --side-ink: var(--bs-primary-text-emphasis); }
+.player-compare [data-side="B"] { --side-color: var(--bs-warning); --side-bg: var(--bs-warning-bg-subtle); --side-ink: var(--bs-warning-text-emphasis); }
+.player-compare .compare-marker {
+    display: inline-grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex-shrink: 0;
+    background: var(--side-bg);
+    color: var(--side-ink);
+    border-radius: .4rem;
+    font-weight: 700;
+}
+.player-compare .compare-cues li + li { margin-top: .5rem; }
+.player-compare .compare-recent + .compare-recent { border-top: 1px solid var(--bs-border-color); padding-top: 1rem; margin-top: 1rem; }
+.player-compare .compare-recent-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; }
+.player-compare .compare-recent-stats dt { color: var(--bs-secondary-color); font-weight: 500; font-size: .8rem; }
+.player-compare .compare-recent-stats dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.15rem; }
+.player-compare .table td { font-variant-numeric: tabular-nums; }
+.player-compare .compare-shot-table td[data-side] { min-width: 8rem; }
+.player-compare .compare-shot-track { background: var(--bs-tertiary-bg); height: .33rem; border-radius: 1rem; overflow: hidden; margin: .25rem 0; }
+.player-compare .compare-shot-track span { display: block; height: 100%; background: var(--side-color); }
+@media (max-width: 575px) { .player-compare .compare-identities { grid-template-columns: 1fr; } }

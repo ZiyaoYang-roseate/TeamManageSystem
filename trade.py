@@ -1,8 +1,29 @@
 import json
 
 from db import fetch_all, fetch_one, transaction
-from roster import available_jersey, lock_player, lock_teams, season_salary_sql, team_payroll
+from roster import available_jersey, lock_player, lock_teams, require_roster_idle, season_salary_sql, team_payroll
 from validation import BusinessError
+
+
+def decode_proposal_side(raw):
+    """Read legacy player lists and the versioned proposal with a private follow-up."""
+    try:
+        data = json.loads(raw)
+        followup = None
+        if isinstance(data, dict) and data.get("version") == 1:
+            followup = data.get("followup")
+            data = data.get("player_ids")
+        if not isinstance(data, list):
+            return [], None
+        return [int(value) for value in data], followup if isinstance(followup, dict) else None
+    except (TypeError, ValueError):
+        return [], None
+
+
+def encode_proposal_side(players, followup=None):
+    if followup is None:
+        return json.dumps(players)
+    return json.dumps({"version": 1, "player_ids": players, "followup": followup})
 
 
 def salary_matching_max(outgoing, over_cap, cap_space):
@@ -37,7 +58,8 @@ def get_team_summary(team_id, player_ids, season, cursor=None):
                   AND c.start_year <= %s AND c.end_year >= %s
             ), 0) AS salary
             FROM players p
-            WHERE p.id IN ({placeholders}) AND p.team_id = %s
+            WHERE p.id IN ({placeholders}) AND p.team_id = %s AND p.archived_at IS NULL
+              AND EXISTS (SELECT 1 FROM teams WHERE id = p.team_id AND archived_at IS NULL)
             """
         year = int(season.split("-", 1)[0])
         params = (year, year, year, *player_ids, team_id)
@@ -59,7 +81,7 @@ def get_team_summary(team_id, player_ids, season, cursor=None):
     over_cap = current_payroll > cap_amount
     cap_space = cap_amount - current_payroll
 
-    roster_sql = "SELECT COUNT(*) AS total FROM players WHERE team_id = %s"
+    roster_sql = "SELECT COUNT(*) AS total FROM players WHERE team_id = %s AND archived_at IS NULL"
     roster_count = (
         _fetch_one_with_cursor(cursor, roster_sql, (team_id,))
         if cursor
@@ -156,6 +178,7 @@ def execute_trade_with_cursor(cursor, payload):
 
     try:
         lock_teams(cursor, team1_id, team2_id)
+        require_roster_idle(cursor, team1_id, team2_id)
         locked_players = {
             player_id: lock_player(cursor, player_id)
             for player_id in sorted(set(team1_players + team2_players))

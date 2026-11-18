@@ -3,6 +3,7 @@ import os
 import secrets
 
 import pymysql
+from itsdangerous import BadData, URLSafeTimedSerializer
 from werkzeug.exceptions import Forbidden
 from flask import (
     Flask,
@@ -18,6 +19,7 @@ from flask import (
 )
 
 import scorekeeper
+import team_planning
 from analysis_routes import blueprint as analysis_blueprint
 from auth import (
     ROLE_LEAGUE_ADMIN,
@@ -28,23 +30,31 @@ from auth import (
     get_user_by_id,
 )
 from db import execute, fetch_all, fetch_one, transaction
+from demo_names import chinese_name, chinese_names_in_text
+from draft_profiles import EXTERNAL_LEVELS, PROFILE_FIELDS, external_profile, parse_profile_fields
+from game_analysis import ZONE_LABELS
+from player_profiles import compare_box_scores, player_comparison_sample, player_contract, player_performance
+from shot_analysis import DETAIL_PAGE_SIZE, annotate_zones, recent_shooting_games, zone_shots
 from decision_analysis import analyze_trade
 from constants import POSITIONS, SEASONS, SHOT_ZONES, SHOT_ZONE_GEOMETRY
 from caching import ttl_cache, invalidate_all
 from validation import (
     BusinessError,
+    bounded_float,
     bounded_int,
+    choice,
     json_object,
     parse_player_form,
     parse_team_form,
     season_value,
 )
 from free_agency_api import blueprint as free_agency_blueprint
-from league_operations import league_overview
-from roster import lock_player, lock_teams, season_salary_sql, team_payroll
+from league_operations import league_overview, game_operations, update_game_review
+from roster import lock_player, lock_teams, require_roster_idle, season_salary_sql, sign_free_agent_with_cursor, team_payroll
+from roster_packages import check_followup_after_trade, recommend_packages
 from roster_recommendations import trade_recommendations
 from security import can_edit_team, csrf_token, management_team_id, require_csrf, require_league_admin
-from trade import execute_trade_with_cursor, validate_trade
+from trade import decode_proposal_side, encode_proposal_side, execute_trade_with_cursor, validate_trade
 
 
 app = Flask(__name__)
@@ -56,6 +66,7 @@ app.config.update(
 )
 app.register_blueprint(free_agency_blueprint)
 app.register_blueprint(analysis_blueprint)
+app.jinja_env.filters.update(chinese_name=chinese_name, chinese_names_in_text=chinese_names_in_text)
 
 
 @app.errorhandler(BusinessError)
@@ -87,6 +98,7 @@ def database_error(exc):
 
 MANAGEMENT_ENDPOINTS = {
     "players",
+    "player_detail",
     "add_player",
     "edit_player",
     "delete_player",
@@ -96,10 +108,8 @@ MANAGEMENT_ENDPOINTS = {
     "add_team",
     "edit_team",
     "delete_team",
-    "salary",
     "health",
     "lineups",
-    "scouting",
     "free_agency",
     "trade_machine",
     "trade_proposals_page",
@@ -216,7 +226,7 @@ def get_teams():
     return fetch_all(
         """
         SELECT id, city, name, abbreviation
-        FROM teams
+        FROM teams WHERE archived_at IS NULL
         ORDER BY name
         """
     )
@@ -382,14 +392,14 @@ def trade_proposals_for_team(team_id):
     )
     all_player_ids = set()
     for row in rows:
-        row["proposer_player_ids"] = _decode_history_player_ids(
-            row["proposer_outgoing"]
-        )
-        row["receiver_player_ids"] = _decode_history_player_ids(
-            row["receiver_outgoing"]
-        )
+        row["proposer_player_ids"], followup = decode_proposal_side(row.pop("proposer_outgoing"))
+        row["receiver_player_ids"], _ = decode_proposal_side(row.pop("receiver_outgoing"))
+        row["is_sender"] = int(row["proposer_team_id"]) == int(team_id)
+        row["followup"] = followup if row["is_sender"] else None
         all_player_ids.update(row["proposer_player_ids"])
         all_player_ids.update(row["receiver_player_ids"])
+        if row["followup"]:
+            all_player_ids.add(followup["player_id"])
 
     player_map = {}
     if all_player_ids:
@@ -409,7 +419,9 @@ def trade_proposals_for_team(team_id):
             player_map.get(player_id, f"球员 #{player_id}")
             for player_id in row["receiver_player_ids"]
         ]
-        row["is_sender"] = int(row["proposer_team_id"]) == int(team_id)
+        if row["followup"]:
+            player_id = row["followup"]["player_id"]
+            row["followup"]["name"] = player_map.get(player_id, f"球员 #{player_id}")
     return rows
 
 
@@ -448,40 +460,6 @@ def get_game_or_404(game_id):
     if game is None:
         abort(404)
     return game
-
-
-def get_player_compare_data(player_id, season):
-    return fetch_one(
-        """
-        SELECT
-            p.id,
-            p.name,
-            p.position,
-            p.age,
-            COALESCE(t.name, 'FREE') AS team_name,
-            COALESCE(t.abbreviation, 'FA') AS abbreviation,
-            COUNT(s.id) AS games_played,
-            ROUND(AVG(s.points), 1) AS ppg,
-            ROUND(AVG(s.rebounds), 1) AS rpg,
-            ROUND(AVG(s.assists), 1) AS apg,
-            ROUND(SUM(s.plus_minus), 1) AS plus_minus,
-            ROUND(SUM(s.plus_minus) / SUM(s.minutes_played) * 48, 1) AS net_rating_per48,
-            ROUND(
-                SUM(s.points)
-                / (2 * (SUM(s.field_goals_attempted) + 0.44 * SUM(s.free_throws_attempted)))
-                * 100,
-                1
-            ) AS ts_percent
-        FROM players p
-        JOIN teams t ON t.id = p.team_id
-        LEFT JOIN player_game_stats s ON s.player_id = p.id
-        LEFT JOIN games g ON g.id = s.game_id AND g.status = 'finished'
-        WHERE p.id = %s
-          AND (g.season = %s OR s.id IS NULL)
-        GROUP BY p.id, p.name, p.position, p.age, t.name, t.abbreviation
-        """,
-        (player_id, season),
-    )
 
 
 @ttl_cache(seconds=60)
@@ -712,17 +690,21 @@ def league_shot_zone_stats(season):
     )
 
 
-def shot_zone_stats(player_id, season):
+def shot_zone_stats(player_id, season, game_ids=None):
     league_rows = league_shot_zone_stats(season)
+    date_filter = ""
+    if game_ids is not None:
+        date_filter = " AND g.id IN (" + ",".join(["%s"] * len(game_ids)) + ")" if game_ids else " AND 1=0"
     player_rows = fetch_all(
-        """
+        f"""
         SELECT sa.zone, COUNT(*) AS attempts, SUM(sa.made) AS made
         FROM shot_attempts sa
         JOIN games g ON g.id = sa.game_id
         WHERE sa.player_id = %s AND g.season = %s AND g.status = 'finished' AND sa.voided_at IS NULL
+          {date_filter}
         GROUP BY sa.zone
         """,
-        (player_id, season),
+        (player_id, season, *(game_ids or [])),
     )
 
     league = {row["zone"]: row for row in league_rows}
@@ -739,24 +721,15 @@ def shot_zone_stats(player_id, season):
         player_pct = player_made / player_attempts if player_attempts else 0
         diff = player_pct - league_pct
 
-        if player_attempts == 0:
-            color = "#49545f"
-        elif diff > 0.001:
-            color = "#FF5722"
-        elif diff < -0.001:
-            color = "#2196F3"
-        else:
-            color = "#FFEB3B"
-
         zones.append(
             {
                 "zone": zone,
                 "attempts": player_attempts,
                 "made": player_made,
                 "player_pct": round(player_pct * 100, 1),
+                "league_attempts": league_attempts,
                 "league_pct": round(league_pct * 100, 1),
                 "diff": round(diff * 100, 1),
-                "color": color,
                 "path": SHOT_ZONE_GEOMETRY[zone]["path"],
                 "text_x": SHOT_ZONE_GEOMETRY[zone]["text_x"],
                 "text_y": SHOT_ZONE_GEOMETRY[zone]["text_y"],
@@ -847,87 +820,6 @@ def lineup_highlights():
     return highlights
 
 
-def salary_data(season, page=1, per_page=20, search=""):
-    year = int(season.split("-", 1)[0])
-    cap = fetch_one("SELECT * FROM salary_caps WHERE season = %s", (season,))
-    if cap is None:
-        abort(404, "该赛季缺少工资帽数据")
-    team_rows = fetch_all(
-        f"""
-        SELECT
-            t.id,
-            t.name,
-            t.abbreviation,
-            COALESCE(SUM({season_salary_sql()} + c.incentives), 0) AS payroll
-        FROM teams t
-        LEFT JOIN contracts c ON c.team_id = t.id AND c.status = 'Active'
-            AND c.start_year <= %s AND c.end_year >= %s
-        GROUP BY t.id, t.name, t.abbreviation
-        ORDER BY payroll DESC
-        """,
-        (year, year, year),
-    )
-    contract_where = ""
-    contract_search_params = ()
-    if search:
-        like = f"%{search}%"
-        contract_where = """
-            WHERE p.name LIKE %s
-               OR t.name LIKE %s
-               OR t.abbreviation LIKE %s
-               OR c.contract_type LIKE %s
-               OR CAST(c.start_year AS CHAR) LIKE %s
-               OR CAST(c.end_year AS CHAR) LIKE %s
-               OR CAST(c.annual_salary AS CHAR) LIKE %s
-        """
-        contract_search_params = (like,) * 7
-
-    contract_total = fetch_one(
-        f"""
-        SELECT COUNT(*) AS total
-        FROM contracts c
-        JOIN players p ON p.id = c.player_id
-        JOIN teams t ON t.id = c.team_id
-        {contract_where}
-        """,
-        contract_search_params,
-    )["total"]
-    total_pages = max(1, (contract_total + per_page - 1) // per_page)
-    page = min(page, total_pages)
-    contract_rows = fetch_all(
-        f"""
-        SELECT c.*, p.name AS player_name, p.position, t.name AS team_name
-        FROM contracts c
-        JOIN players p ON p.id = c.player_id
-        JOIN teams t ON t.id = c.team_id
-        {contract_where}
-        ORDER BY c.annual_salary DESC, p.name, c.id
-        LIMIT %s OFFSET %s
-        """,
-        (*contract_search_params, per_page, (page - 1) * per_page),
-    )
-    trade_contracts = fetch_all(
-        f"""
-        SELECT c.player_id, {season_salary_sql()} AS annual_salary, p.name AS player_name
-        FROM contracts c
-        JOIN players p ON p.id = c.player_id
-        WHERE c.status = 'Active' AND c.start_year <= %s AND c.end_year >= %s
-        ORDER BY annual_salary DESC, p.name
-        """,
-        (year, year, year),
-    )
-
-    teams = []
-    for row in team_rows:
-        payroll = int(row["payroll"])
-        row["cap_space"] = cap["cap_amount"] - payroll
-        row["over_cap"] = max(0, payroll - cap["cap_amount"])
-        row["luxury_tax"] = max(0, round((payroll - cap["luxury_tax_line"]) * 2.5))
-        teams.append(row)
-
-    return cap, teams, contract_rows, trade_contracts, contract_total, page, total_pages
-
-
 def health_data():
     return fetch_all(
         """
@@ -943,59 +835,6 @@ def health_data():
         ORDER BY h.fatigue_score DESC, h.injury_status
         """
     )
-
-
-def scouting_data(player_id=None, page=1, per_page=20, search=""):
-    reports = fetch_all(
-        """
-        SELECT s.*, p.name AS player_name, p.position, t.name AS team_name, t.abbreviation
-        FROM scout_reports s
-        JOIN players p ON p.id = s.player_id
-        JOIN teams t ON t.id = p.team_id
-        ORDER BY s.overall_rating DESC
-        """
-    )
-    if player_id is None and reports:
-        player_id = reports[0]["player_id"]
-    selected = next((row for row in reports if row["player_id"] == player_id), reports[0] if reports else None)
-    pick_where = ""
-    pick_search_params = ()
-    if search:
-        like = f"%{search}%"
-        pick_where = """
-            WHERE t.name LIKE %s
-               OR t.abbreviation LIKE %s
-               OR d.season LIKE %s
-               OR CAST(d.round AS CHAR) LIKE %s
-               OR CAST(d.pick_number AS CHAR) LIKE %s
-               OR d.protection LIKE %s
-               OR d.status LIKE %s
-        """
-        pick_search_params = (like,) * 7
-
-    pick_total = fetch_one(
-        f"""
-        SELECT COUNT(*) AS total
-        FROM draft_picks d
-        JOIN teams t ON t.id = d.team_id
-        {pick_where}
-        """,
-        pick_search_params,
-    )["total"]
-    total_pages = max(1, (pick_total + per_page - 1) // per_page)
-    page = min(page, total_pages)
-    draft_picks = fetch_all(
-        f"""
-        SELECT d.*, t.name AS team_name, t.abbreviation
-        FROM draft_picks d
-        JOIN teams t ON t.id = d.team_id
-        {pick_where}
-        ORDER BY d.season DESC, d.round, d.pick_number, t.name
-        LIMIT %s OFFSET %s
-        """,
-        (*pick_search_params, per_page, (page - 1) * per_page),
-    )
-    return reports, selected, draft_picks, pick_total, page, total_pages
 
 
 def _role_home(role):
@@ -1062,6 +901,61 @@ def league_dashboard():
     }
 
 
+@app.route("/league/games/<int:game_id>", methods=["GET", "POST"])
+def league_game(game_id):
+    require_league_admin()
+    if request.method == "POST":
+        action = choice(request.form.get("action"), "核查操作", ("open", "resolve"))
+        note = request.form.get("note", "").strip()
+        if not 1 <= len(note) <= 500:
+            raise BusinessError("请填写 1 至 500 字的核查说明")
+        update_game_review(game_id, g.user["id"], action, note)
+        flash("完赛核查记录已更新", "success")
+        return redirect(url_for("league_game", game_id=game_id), code=303)
+    game, starters, review = game_operations(game_id)
+    return render_template("league_game.html", game=game, starters=starters, review=review), {
+        "Cache-Control": "private, no-store",
+    }
+
+
+@app.route("/league/draft-pool", methods=["GET", "POST"])
+def league_draft_pool():
+    require_league_admin()
+    if request.method == "POST":
+        form = request.form
+        year = bounded_int(form.get("draft_year"), "选秀年份", 2000, 2100)
+        position = choice(form.get("position"), "位置", POSITIONS)
+        name = form.get("name", "").strip()
+        if not 1 <= len(name) <= 80:
+            raise BusinessError("请填写候选人姓名")
+        source, observation = parse_profile_fields(form)
+        games = bounded_int(form.get("games"), "样本场次", 1, 999)
+        minutes = bounded_int(form.get("minutes"), "场均分钟", 1, 60)
+        metrics = [bounded_float(form.get(key), key, 0, 99) for key in ("assists", "turnovers", "rebounds", "threes")]
+        try:
+            execute(
+                """
+                INSERT INTO draft_prospects
+                    (draft_year, name, position, source, games, minutes, assists, turnovers, rebounds, threes, observation)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (year, name, position, source, games, minutes, *metrics, observation),
+            )
+        except pymysql.err.IntegrityError as exc:
+            if exc.args[0] != 1062:
+                raise
+            raise BusinessError("同届已有同名候选人", 409) from exc
+        flash("候选人已发布到各队的公共候选池", "success")
+        return redirect(url_for("league_draft_pool"), code=303)
+    candidates = fetch_all("SELECT draft_year, name, position, source, observation FROM draft_prospects ORDER BY draft_year DESC, name")
+    for row in candidates:
+        row["profile"] = external_profile(row)
+    return render_template(
+        "league_draft_pool.html", candidates=candidates, positions=POSITIONS,
+        levels=EXTERNAL_LEVELS, profile_fields=PROFILE_FIELDS,
+    )
+
+
 @app.route("/analytics")
 def analytics():
     season = current_season()
@@ -1089,17 +983,35 @@ def shot_chart():
     season = current_season()
     player_rows = fetch_all(
         """
-        SELECT p.id, p.name, t.name AS team_name, t.abbreviation
+        SELECT p.id, p.name, COALESCE(t.name, '自由球员') AS team_name,
+               COALESCE(t.abbreviation, 'FA') AS abbreviation
         FROM players p
-        JOIN teams t ON t.id = p.team_id
-        ORDER BY t.name, p.jersey_number
+        LEFT JOIN teams t ON t.id = p.team_id
+        ORDER BY t.id IS NULL, t.name, p.jersey_number, p.id
         """
     )
     player_id = request.args.get("player_id", type=int)
-    if player_id is None and player_rows:
+    if "player_id" not in request.args and player_rows:
         player_id = player_rows[0]["id"]
     selected = next((row for row in player_rows if row["id"] == player_id), None)
-    zones = shot_zone_stats(player_id, season) if player_id else []
+    mode = "efficiency" if request.args.get("mode") == "efficiency" else "volume"
+    scope = "recent" if request.args.get("scope") == "recent" else "season"
+    outcome = request.args.get("outcome", "all")
+    if outcome not in {"all", "made", "missed"}:
+        outcome = "all"
+    page = max(1, request.args.get("shot_page", 1, type=int))
+    game_ids = recent_shooting_games(player_id, season) if selected and scope == "recent" else None
+    zones = shot_zone_stats(player_id, season, game_ids) if selected else []
+    total = annotate_zones(zones)
+    for zone in zones:
+        zone["label"] = ZONE_LABELS[zone["zone"]]
+    focus = next((row for row in zones if row["zone"] == request.args.get("zone")), None)
+    most_used = max(zones, key=lambda row: row["attempts"]) if total else None
+    focus = focus or most_used
+    rows, detail_count, page = (
+        zone_shots(player_id, season, focus["zone"], game_ids, outcome, page)
+        if focus and focus["attempts"] else ([], 0, 1)
+    )
     return render_template(
         "shot_chart.html",
         players=player_rows,
@@ -1107,6 +1019,9 @@ def shot_chart():
         zones=zones,
         season=season,
         seasons=SEASONS,
+        mode=mode, scope=scope, recent_count=len(game_ids) if game_ids is not None else None, outcome=outcome,
+        total=total, focus=focus, shots=rows, detail_count=detail_count, page=page, detail_page_size=DETAIL_PAGE_SIZE,
+        selection_missing=not selected and "player_id" in request.args,
     )
 
 
@@ -1131,26 +1046,56 @@ def lineups():
     )
 
 
-@app.route("/salary")
+def _package_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt="team-roster-package")
+
+
+@app.route("/salary", methods=["GET", "POST"])
 def salary():
+    team_id = management_team_id()
     season = current_season()
-    page, per_page = pagination_args(20)
-    search = search_term()
-    cap, teams, contracts, trade_contracts, total, page, total_pages = salary_data(
-        season, page, per_page, search
-    )
+    team, years, contracts = team_planning.salary_plan(team_id, season)
+    recommendations = None
+    if request.method == "POST":
+        recommendations = recommend_packages(team_id, season)
+        serializer = _package_serializer()
+        for plan in recommendations["plans"]:
+            plan["token"] = serializer.dumps(plan.pop("payload"))
     return render_template(
-        "salary.html",
-        cap=cap,
-        teams=teams,
-        contracts=contracts,
-        trade_contracts=trade_contracts,
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=total_pages,
-        search=search,
-    )
+        "salary.html", team=team, season=season, years=years, contracts=contracts, recommendations=recommendations,
+    ), {"Cache-Control": "private, no-store"}
+
+
+@app.post("/salary/packages/apply")
+def apply_roster_package():
+    team_id = management_team_id()
+    try:
+        package = _package_serializer().loads(request.form.get("token", ""), max_age=900)
+    except BadData:
+        raise BusinessError("方案已失效，请重新生成", 409)
+    if package["trade"]["team1_id"] != team_id:
+        abort(403)
+    trade_payload = _trade_payload(package["trade"], team_id)
+    followup = package["followup"]
+    result, status = _submit_trade(trade_payload, followup=followup)
+    if status >= 400:
+        flash(result.get("error") or "；".join(result["reasons"]), "danger")
+        return redirect(url_for("salary", season=trade_payload["season"]), code=303)
+    flash("组合方案已关联交易申请。对方接受后可在发出的交易中确认签约。", "success")
+    return redirect(url_for("trade_proposals_page"), code=303)
+
+
+@app.post("/api/salary/preview/<kind>")
+def salary_preview(kind):
+    team_id = management_team_id()
+    payload = json_object()
+    if kind == "signing":
+        result = team_planning.signing_preview(team_id, payload)
+    elif kind == "trade":
+        result = team_planning.trade_preview(team_id, _trade_payload(payload, team_id))
+    else:
+        abort(404)
+    return jsonify(result), {"Cache-Control": "private, no-store"}
 
 
 @app.route("/health")
@@ -1158,64 +1103,90 @@ def health():
     return render_template("health.html", rows=health_data())
 
 
-@app.route("/scouting")
+@app.route("/scouting", methods=["GET", "POST"])
 def scouting():
-    player_id = request.args.get("player_id", type=int)
-    page, per_page = pagination_args(20)
-    search = search_term()
-    reports, selected, draft_picks, total, page, total_pages = scouting_data(
-        player_id, page, per_page, search
-    )
-    return render_template(
-        "scouting.html",
-        reports=reports,
-        selected=selected,
-        draft_picks=draft_picks,
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=total_pages,
-        search=search,
-    )
+    team_id = management_team_id()
+    season = current_season()
+    values = request.form if request.method == "POST" else request.args
+    raw_year = values.get("year")
+    year = bounded_int(raw_year, "选秀年份", 2000, 2100) if raw_year else None
+    comparison = None
+    if request.method == "POST":
+        action = choice(values.get("action"), "操作", ("save", "remove", "compare"))
+        if action in {"save", "remove"}:
+            prospect_id = bounded_int(values.get("prospect_id"), "候选人")
+            if action == "save":
+                priority = bounded_int(values.get("priority") or 999, "优先顺序", 1, 999)
+                role = values.get("role_note", "").strip()
+                notes = values.get("notes", "").strip()
+                if len(role) > 120 or len(notes) > 600:
+                    raise BusinessError("预期角色或观察笔记过长")
+                team_planning.update_draft_board(team_id, year, prospect_id, priority, role, notes)
+            else:
+                team_planning.update_draft_board(team_id, year, prospect_id)
+            flash("本队选秀板已更新", "success")
+            return redirect(url_for("scouting", year=year, season=season), code=303)
+        raw_ids = values.getlist("candidate")
+        if not 2 <= len(raw_ids) <= 3:
+            raise BusinessError("请选择 2 至 3 名候选人")
+        selected = {bounded_int(value, "候选人") for value in raw_ids}
+    workspace = team_planning.draft_workspace(team_id, season, year)
+    if request.method == "POST":
+        comparison = team_planning.draft_comparison(workspace, selected)
+    return render_template("scouting.html", workspace=workspace, comparison=comparison, season=season), {
+        "Cache-Control": "private, no-store",
+    }
 
 
-@app.route("/compare")
+@app.get("/compare")
 def compare_players():
     season = current_season()
-    player_rows = fetch_all(
+    mode = "per36" if request.args.get("mode") == "per36" else "game"
+    players = fetch_all(
         """
-        SELECT p.id, p.name, t.name AS team_name, t.abbreviation
-        FROM players p
-        JOIN teams t ON t.id = p.team_id
-        ORDER BY t.name, p.jersey_number
+        SELECT p.id, p.name, p.age, p.position, p.team_id,
+               COALESCE(t.name, '自由球员') AS team_name, COALESCE(t.abbreviation, 'FA') AS abbreviation
+        FROM players p LEFT JOIN teams t ON t.id = p.team_id
+        ORDER BY t.id IS NULL, t.name, p.jersey_number, p.id
         """
     )
+    choices = {player["id"]: player for player in players}
     player1_id = request.args.get("player1_id", type=int)
     player2_id = request.args.get("player2_id", type=int)
+    error = None
 
-    if player1_id is None and player_rows:
-        player1_id = player_rows[0]["id"]
-    if player2_id is None and len(player_rows) > 1:
-        player2_id = player_rows[1]["id"]
-    if player2_id is None and player1_id is not None:
-        player2_id = player1_id
+    if "player1_id" not in request.args and players:
+        player1_id = players[0]["id"]
+    player1 = choices.get(player1_id)
+    if "player2_id" not in request.args and player1:
+        other_players = [row for row in players if row["id"] != player1_id]
+        preferred = next((row for row in other_players if row["position"] == player1["position"]), None)
+        player2_id = (preferred or other_players[0])["id"] if other_players else None
+    player2 = choices.get(player2_id)
+    if any(f"player{index}_id" in request.args and selected is None
+           for index, selected in enumerate((player1, player2), 1)):
+        error = "该球员不存在，请重新选择。"
+    elif player1 and player2 and player1["id"] == player2["id"]:
+        error = "请选择两名不同的球员。"
 
-    player1 = get_player_compare_data(player1_id, season) if player1_id else None
-    player2 = get_player_compare_data(player2_id, season) if player2_id else None
-    zones1 = shot_zone_stats(player1_id, season) if player1_id else []
-    zones2 = shot_zone_stats(player2_id, season) if player2_id else []
+    sides, box_scores, cues, zones, comparable = [], [], [], [], False
+    if player1 and player2 and not error:
+        for side, player in zip(("A", "B"), (player1, player2)):
+            summary, recent = player_comparison_sample(player["id"], season)
+            shot_rows = shot_zone_stats(player["id"], season)
+            sides.append({"side": side, "player": player, "summary": summary, "recent": recent,
+                          "attempts": sum(row["attempts"] for row in shot_rows), "shots": shot_rows})
+        box_scores, cues, comparable = compare_box_scores(sides[0]["summary"], sides[1]["summary"], mode)
+        for first, second in zip(sides[0]["shots"], sides[1]["shots"]):
+            zones.append({
+                "label": ZONE_LABELS[first["zone"]], "first": first, "second": second,
+                "difference": round(first["player_pct"] - second["player_pct"], 1)
+                if min(first["attempts"], second["attempts"]) >= 10 else None,
+            })
 
     return render_template(
-        "compare.html",
-        players=player_rows,
-        player1=player1,
-        player2=player2,
-        player1_id=player1_id,
-        player2_id=player2_id,
-        zones1=zones1,
-        zones2=zones2,
-        season=season,
-        seasons=SEASONS,
+        "compare.html", players=players, player1=player1, player2=player2, mode=mode, season=season, seasons=SEASONS,
+        error=error, sides=sides, box_scores=box_scores, cues=cues, zones=zones, comparable=comparable,
     )
 
 
@@ -1235,7 +1206,7 @@ def free_agency():
                COALESCE(t.abbreviation, 'FA') AS abbreviation
         FROM players p
         LEFT JOIN teams t ON t.id = p.team_id
-        WHERE p.team_id IS NULL
+        WHERE p.team_id IS NULL AND p.archived_at IS NULL
         ORDER BY p.name
         """
     )
@@ -1254,7 +1225,7 @@ def free_agency():
 def free_agents():
     position = request.args.get("position")
     age = request.args.get("age", type=int)
-    sql = "SELECT p.* FROM players p WHERE p.team_id IS NULL"
+    sql = "SELECT p.* FROM players p WHERE p.team_id IS NULL AND p.archived_at IS NULL"
     params = []
     if position:
         sql += " AND p.position = %s"
@@ -1275,7 +1246,8 @@ def team_players(team_id):
         FROM players p
         LEFT JOIN contracts c ON c.active_player_id = p.id
             AND c.team_id = p.team_id AND c.start_year <= %s AND c.end_year >= %s
-        WHERE p.team_id = %s
+        WHERE p.team_id = %s AND p.archived_at IS NULL
+          AND EXISTS (SELECT 1 FROM teams WHERE id = p.team_id AND archived_at IS NULL)
         ORDER BY p.position, p.jersey_number
         """,
         (year, year, year, team_id),
@@ -1311,6 +1283,12 @@ def execute_trade_api():
 def create_trade_proposal():
     proposer_team_id = management_team_id()
     trade_payload = _trade_payload(json_object(), proposer_team_id)
+    result, status = _submit_trade(trade_payload)
+    return jsonify(result), status
+
+
+def _submit_trade(trade_payload, followup=None):
+    proposer_team_id = trade_payload["team1_id"]
     receiver_team_id = trade_payload["team2_id"]
     season = trade_payload["season"]
     sent = sorted(trade_payload["team1_outgoing_player_ids"])
@@ -1319,10 +1297,10 @@ def create_trade_proposal():
         lock_teams(cursor, proposer_team_id, receiver_team_id)
         validation = validate_trade(trade_payload, cursor)
         if not validation["is_valid"]:
-            return jsonify(validation), 400
+            return validation, 400
         cursor.execute("SELECT id FROM users WHERE role = %s AND team_id = %s", (ROLE_MANAGEMENT, receiver_team_id))
         if cursor.fetchone() is None:
-            return jsonify({"error": "接收球队尚未配置管理层账号"}), 400
+            return {"error": "接收球队尚未配置管理层账号"}, 400
         cursor.execute(
             """
             SELECT id, proposer_outgoing, receiver_outgoing FROM trade_proposals
@@ -1331,9 +1309,17 @@ def create_trade_proposal():
             (proposer_team_id, receiver_team_id, season),
         )
         for proposal in cursor.fetchall():
-            if (sorted(_decode_history_player_ids(proposal["proposer_outgoing"])) == sent
-                    and sorted(_decode_history_player_ids(proposal["receiver_outgoing"])) == received):
-                return jsonify({"message": "相同的交易方案已发送，等待对方管理层处理", "proposal_id": proposal["id"]})
+            existing_sent, saved_followup = decode_proposal_side(proposal["proposer_outgoing"])
+            existing_received, _ = decode_proposal_side(proposal["receiver_outgoing"])
+            if sorted(existing_sent) == sent and sorted(existing_received) == received:
+                if followup is not None and saved_followup != followup:
+                    return {"error": "相同的交易已在等待审批，请先处理原申请再应用新的组合方案"}, 409
+                return {"message": "相同的交易方案已发送，等待对方管理层处理", "proposal_id": proposal["id"]}, 200
+        if followup:
+            try:
+                check_followup_after_trade(cursor, trade_payload, followup)
+            except BusinessError as exc:
+                return {"error": str(exc)}, exc.status_code
         cursor.execute(
             """
             INSERT INTO trade_proposals
@@ -1341,10 +1327,11 @@ def create_trade_proposal():
                  proposer_outgoing, receiver_outgoing, season, status)
             VALUES (%s, %s, %s, %s, %s, %s, 'pending')
             """,
-            (proposer_team_id, receiver_team_id, g.user["id"], json.dumps(sent), json.dumps(received), season),
+            (proposer_team_id, receiver_team_id, g.user["id"], encode_proposal_side(sent, followup),
+             encode_proposal_side(received), season),
         )
         proposal_id = cursor.lastrowid
-    return jsonify({"message": "交易方案已发送，等待对方管理层处理", "proposal_id": proposal_id}), 201
+    return {"message": "交易方案已发送，等待对方管理层处理", "proposal_id": proposal_id}, 201
 
 
 def _trade_payload(payload, proposer_team_id):
@@ -1394,12 +1381,8 @@ def accept_trade_proposal(proposal_id):
             trade_payload = {
                 "team1_id": proposal["proposer_team_id"],
                 "team2_id": proposal["receiver_team_id"],
-                "team1_outgoing_player_ids": _decode_history_player_ids(
-                    proposal["proposer_outgoing"]
-                ),
-                "team2_outgoing_player_ids": _decode_history_player_ids(
-                    proposal["receiver_outgoing"]
-                ),
+                "team1_outgoing_player_ids": decode_proposal_side(proposal["proposer_outgoing"])[0],
+                "team2_outgoing_player_ids": decode_proposal_side(proposal["receiver_outgoing"])[0],
                 "season": proposal["season"],
             }
             result = execute_trade_with_cursor(cursor, trade_payload)
@@ -1421,6 +1404,35 @@ def accept_trade_proposal(proposal_id):
     invalidate_all()
     flash("交易方案已接受，球员与合同已完成交换", "success")
     return redirect(url_for("trade_proposals_page"))
+
+
+@app.post("/trade-proposals/<int:proposal_id>/complete-signing")
+def complete_roster_package(proposal_id):
+    team_id = management_team_id()
+    try:
+        with transaction() as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM trade_proposals WHERE id=%s FOR UPDATE", (proposal_id,))
+            proposal = cursor.fetchone()
+            if proposal is None:
+                abort(404)
+            if proposal["proposer_team_id"] != team_id:
+                abort(403)
+            sent, followup = decode_proposal_side(proposal["proposer_outgoing"])
+            if not followup:
+                abort(404)
+            if proposal["status"] != "accepted":
+                raise BusinessError("交易成交后才能确认签约", 409)
+            if followup.get("signed"):
+                raise BusinessError("这个组合方案已完成签约", 409)
+            sign_free_agent_with_cursor(cursor, team_id, followup["player_id"], followup["salary"], 1, proposal["season"])
+            cursor.execute("UPDATE trade_proposals SET proposer_outgoing=%s WHERE id=%s",
+                           (encode_proposal_side(sent, {**followup, "signed": True}), proposal_id))
+    except BusinessError as exc:
+        flash(str(exc), "danger")
+    else:
+        invalidate_all()
+        flash("自由市场签约已完成，组合方案已应用。", "success")
+    return redirect(url_for("trade_proposals_page"), code=303)
 
 
 @app.route("/trade-proposals/<int:proposal_id>/reject", methods=["POST"])
@@ -1540,12 +1552,36 @@ def players():
     return render_template(
         "players.html",
         players=players,
+        season=current_season(),
         page=page,
         per_page=per_page,
         total=total,
         total_pages=total_pages,
         search=search,
     )
+
+
+@app.get("/players/<int:player_id>")
+def player_detail(player_id):
+    player = get_player_or_404(player_id)
+    season = current_season()
+    performance = player_performance(player_id, season)
+    zones = [
+        {**row, "label": ZONE_LABELS[row["zone"]]} for row in shot_zone_stats(player_id, season)
+    ]
+    shot_total = sum(row["attempts"] for row in zones)
+    favorite = max(zones, key=lambda zone: zone["attempts"]) if shot_total else None
+    show_contract = (
+        g.user["role"] == ROLE_MANAGEMENT and player["team_id"] is not None and player["team_id"] == g.user["team_id"]
+    )
+    contract = player_contract(player_id, player["team_id"], season) if show_contract else None
+    page, per_page = pagination_args()
+    response = render_template(
+        "player_detail.html", player=player, season=season, seasons=SEASONS, performance=performance,
+        zones=zones, shot_total=shot_total, favorite=favorite, contract=contract, show_contract=show_contract,
+        list_url=url_for("players", season=season, q=search_term() or None, page=page, per_page=per_page),
+    )
+    return response, {"Cache-Control": "private, no-store"}
 
 
 @app.route("/players/add", methods=["GET", "POST"])
@@ -1579,7 +1615,7 @@ def add_player():
 def edit_player(player_id):
     player = get_player_or_404(player_id)
 
-    if not can_edit_team(player["team_id"]):
+    if player["archived_at"] or not can_edit_team(player["team_id"]):
         abort(403)
     if request.method == "POST":
         try:
@@ -1619,11 +1655,22 @@ def edit_player(player_id):
 
 
 @app.route("/players/delete/<int:player_id>", methods=["POST"])
+@app.post("/players/<int:player_id>/archive")
 def delete_player(player_id):
     require_league_admin()
-    execute("DELETE FROM players WHERE id = %s", (player_id,))
+    reference = get_player_or_404(player_id)
+    if reference["archived_at"]:
+        return redirect(url_for("players"))
+    with transaction() as connection, connection.cursor() as cursor:
+        if reference["team_id"] is not None:
+            cursor.execute("SELECT id FROM teams WHERE id=%s FOR UPDATE", (reference["team_id"],))
+            require_roster_idle(cursor, reference["team_id"])
+        player = lock_player(cursor, player_id)
+        if player["team_id"] != reference["team_id"]:
+            raise BusinessError("球员归属已变更，请刷新后再归档", 409)
+        cursor.execute("UPDATE players SET archived_at=NOW() WHERE id=%s", (player_id,))
     invalidate_all()
-    flash("球员已删除", "success")
+    flash("球员已归档，历史比赛和合同记录保留。", "success")
     return redirect(url_for("players"))
 
 
@@ -1665,7 +1712,7 @@ def teams():
         LEFT JOIN coaches c ON c.team_id = t.id
         LEFT JOIN players p ON p.team_id = t.id
         {where_clause}
-        GROUP BY t.id, t.city, t.name, t.abbreviation, t.founded_year, t.arena,
+        GROUP BY t.id, t.city, t.name, t.abbreviation, t.founded_year, t.arena, t.archived_at,
                  c.name, c.experience_years
         ORDER BY t.name
         LIMIT %s OFFSET %s
@@ -1815,6 +1862,8 @@ def edit_team(team_id):
     if not can_edit_team(team_id):
         abort(403)
     team = get_team_or_404(team_id)
+    if team["archived_at"]:
+        abort(403)
 
     if request.method == "POST":
         try:
@@ -1840,11 +1889,26 @@ def edit_team(team_id):
 
 
 @app.route("/teams/delete/<int:team_id>", methods=["POST"])
+@app.post("/teams/<int:team_id>/archive")
 def delete_team(team_id):
     require_league_admin()
-    execute("DELETE FROM teams WHERE id = %s", (team_id,))
+    if get_team_or_404(team_id)["archived_at"]:
+        return redirect(url_for("teams"))
+    with transaction() as connection, connection.cursor() as cursor:
+        lock_teams(cursor, team_id)
+        require_roster_idle(cursor, team_id)
+        cursor.execute("UPDATE teams SET archived_at=NOW() WHERE id=%s", (team_id,))
+        cursor.execute(
+            "UPDATE games SET status='cancelled' WHERE status='scheduled' AND (home_team_id=%s OR away_team_id=%s)",
+            (team_id, team_id),
+        )
+        cursor.execute(
+            """UPDATE trade_proposals SET status='cancelled', responded_at=NOW()
+               WHERE status='pending' AND (proposer_team_id=%s OR receiver_team_id=%s)""",
+            (team_id, team_id),
+        )
     invalidate_all()
-    flash("球队及其关联数据已删除", "success")
+    flash("球队已归档，待开赛赛程和待审批交易已取消，历史记录保留。", "success")
     return redirect(url_for("teams"))
 
 
@@ -1976,14 +2040,6 @@ def scorekeeper_calendar():
         """,
         (season,),
     )
-    schedule_bounds = fetch_one(
-        """
-        SELECT MIN(game_date) AS min_date, MAX(game_date) AS max_date
-        FROM games
-        WHERE season = %s
-        """,
-        (season,),
-    )
     games_data = fetch_all(
         """
         SELECT
@@ -2000,7 +2056,7 @@ def scorekeeper_calendar():
         FROM games g
         JOIN teams ht ON ht.id = g.home_team_id
         JOIN teams at ON at.id = g.away_team_id
-        WHERE g.season = %s
+        WHERE g.season = %s AND g.status <> 'cancelled'
         ORDER BY g.game_date, g.id
         """,
         (season,),
@@ -2019,17 +2075,17 @@ def scorekeeper_calendar():
         seasons=SEASONS,
         business_date=business_date,
         business_date_updated_at=business_setting["updated_at"] if business_setting else None,
-        schedule_min_date=schedule_bounds["min_date"],
-        schedule_max_date=schedule_bounds["max_date"],
     )
 
 
-@app.route("/scorekeeper/calendar/date", methods=["POST"])
-def scorekeeper_calendar_date():
+@app.post("/scorekeeper/calendar/date")
+@app.post("/league/business-date")
+def league_business_date():
+    require_league_admin()
     season = request.form.get("season", "")
     if season not in SEASONS:
         flash("赛季参数无效", "danger")
-        return redirect(url_for("scorekeeper_calendar"))
+        return redirect(url_for("league_dashboard"))
 
     try:
         target_date = scorekeeper.as_date(request.form.get("business_date"), "比赛日")
@@ -2056,7 +2112,7 @@ def scorekeeper_calendar_date():
                     """
                     SELECT COUNT(*) AS total
                     FROM games
-                    WHERE season = %s AND game_date = %s
+                    WHERE season = %s AND game_date = %s AND status <> 'cancelled'
                     """,
                     (season, target_date),
                 )
@@ -2069,7 +2125,7 @@ def scorekeeper_calendar_date():
                     FROM games
                     WHERE season = %s
                       AND game_date < %s
-                      AND status <> 'finished'
+                      AND status IN ('scheduled', 'live')
                     """,
                     (season, target_date),
                 )
@@ -2093,7 +2149,7 @@ def scorekeeper_calendar_date():
         invalidate_all()
         flash(f"当前比赛日已更新为 {target_date.isoformat()}", "success")
 
-    return redirect(url_for("scorekeeper_calendar", season=season))
+    return redirect(url_for("league_dashboard", season=season), code=303)
 
 
 @app.route("/scorekeeper/game/<int:game_id>")
