@@ -64,15 +64,18 @@
         <button class="btn btn-outline-primary btn-lg" type="button" id="tradeAnalysisButton">
             分析交易方案
         </button>
+        <button class="btn btn-outline-secondary btn-lg" type="button" id="tradeBudgetButton">比较逐年预算</button>
         <button class="btn btn-success btn-lg d-none" id="sendTradeButton">
             <i class="bi bi-send me-1"></i>发送交易方案
         </button>
         <div id="tradeResult" class="mt-4 text-start"></div>
         <div id="tradeAnalysis" class="text-start" aria-live="polite"></div>
+        <div id="tradeBudget" class="text-start" aria-live="polite"></div>
     </div>
 </div>
 
 <script src="{{ url_for('static', filename='decision-analysis.js') }}"></script>
+<script src="{{ url_for('static', filename='salary-preview.js') }}"></script>
 <script>
     const ownTeamId = {{ own_team.id }};
     const tradeSeason = {{ season | tojson }};
@@ -216,6 +219,12 @@
 
     document.getElementById("teamBSelect").addEventListener("change", () => loadTeamPlayers("B"));
     document.getElementById("validateTradeButton").addEventListener("click", validateTrade);
+    bindBudgetPreview(document.getElementById("tradeBudgetButton"), document.getElementById("tradeBudget"),
+        {{ url_for('salary_preview', kind='trade') | tojson }}, tradeCsrfToken, () => {
+            const payload = buildTradePayload();
+            return payload.team1_outgoing_player_ids.length && payload.team2_outgoing_player_ids.length ? payload : null;
+        });
+
     const tradeAnalysisButton = document.getElementById("tradeAnalysisButton");
     const tradeAnalysisBox = document.getElementById("tradeAnalysis");
     tradeAnalysisButton.addEventListener("click", () => {

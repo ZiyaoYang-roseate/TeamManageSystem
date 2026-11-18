@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}{{ player.name }} · 球员主页{% endblock %}
+{% block content %}
+{% macro stat(value) %}{{ "—" if value is none else "%.1f"|format(value) }}{% endmacro %}
+{% macro percent(value) %}{% if value is none %}—{% else %}{{ stat(value) }}%{% endif %}{% endmacro %}
+{% set summary = performance.summary %}
+{% set recent_average = performance.recent_average %}
+{% set positions = {'PG': '控球后卫', 'SG': '得分后卫', 'SF': '小前锋', 'PF': '大前锋', 'C': '中锋'} %}
+<link rel="stylesheet" href="{{ url_for('static', filename='player-profile.css') }}">
+
+<div class="player-profile">
+    <nav aria-label="返回球员档案" class="mb-3">
+        <a class="small" href="{{ list_url }}"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>球员档案</a>
+    </nav>
+    <header class="profile-hero mb-4">
+        <div class="profile-jersey" aria-hidden="true">
+            <span>{{ player.abbreviation }}</span>
+            {% if player.team_id %}<strong>{{ player.jersey_number }}</strong>{% else %}<strong>FA</strong>{% endif %}
+        </div>
+        <div class="profile-identity">
+            <div class="d-flex gap-2 align-items-center flex-wrap mb-1">
+                {% if player.team_id %}
+                <a class="fw-semibold link-body-emphasis" href="{{ url_for('team_detail', team_id=player.team_id, season=season) }}">{{ player.team_name }}</a>
+                {% else %}
+                <span class="badge text-bg-secondary">自由球员</span>
+                {% endif %}
+                <span class="text-secondary">{{ positions.get(player.position, player.position) }}</span>
+                {% if player.archived_at %}<span class="badge text-bg-secondary">已归档</span>{% endif %}
+            </div>
+            <h1>{{ player.name }}</h1>
+            <div class="profile-bio">
+                <span>{{ player.age }} 岁</span><span>{{ player.height_cm|round(1) }} cm</span><span>{{ player.weight_kg|round(1) }} kg</span><span>{{ player.nationality }}</span>
+            </div>
+        </div>
+        <div class="profile-tools">
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('shot_chart', player_id=player.id, season=season) }}">完整投篮热区</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('compare_players', player1_id=player.id, season=season) }}">加入球员对比</a>
+            {% if not player.team_id and not player.archived_at and current_user.role == ROLE_MANAGEMENT %}
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('free_agency', season=season) }}">查看自由市场</a>
+            {% endif %}
+            {% if not player.archived_at and can_edit_team(player.team_id) %}
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('edit_player', player_id=player.id) }}">编辑档案</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <section class="mb-4" aria-labelledby="season-performance">
+        <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-2">
+            <h2 class="h5 mb-0" id="season-performance">{{ season }} 赛季表现</h2>
+            <span class="text-secondary small">{% if summary %}{{ summary.games }} 场已完赛出场记录{% else %}暂无出场记录{% endif %}</span>
+        </div>
+        {% set metrics = [('points', '场均得分'), ('rebounds', '场均篮板'), ('assists', '场均助攻'), ('minutes', '场均分钟'), ('fg_pct', '投篮命中率'), ('ts_pct', '真实命中率')] %}
+        <dl class="profile-stats">
+            {% for key, label in metrics %}
+            {% set value = summary[key] if summary else none %}
+            <div>
+                <dt>{{ label }}</dt>
+                <dd>{{ percent(value) if key.endswith('_pct') else stat(value) }}</dd>
+            </div>
+            {% endfor %}
+        </dl>
+        {% if summary %}
+        <div class="profile-secondary small text-secondary">
+            <span>场均抢断 {{ stat(summary.steals) }}</span>
+            <span>场均盖帽 {{ stat(summary.blocks) }}</span>
+            <span>场均失误 {{ stat(summary.turnovers) }}</span>
+            <span>场均三分命中 {{ stat(summary.threes) }}</span>
+            <span>场均正负值 {{ "%+.1f"|format(summary.plus_minus) }}</span>
+        </div>
+        {% else %}
+        <p class="small text-secondary mt-2 mb-0">可在顶部切换赛季，查看已录入的历史表现。</p>
+        {% endif %}
+    </section>
+
+    <div class="profile-columns mb-4">
+        <section class="profile-panel" aria-labelledby="recent-title">
+            <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0" id="recent-title">最近比赛</h2>
+                {% if recent_average %}<span class="small text-secondary">最近 {{ recent_average.games }} 场</span>{% endif %}
+            </div>
+            {% if performance.recent %}
+            <div class="profile-recent-summary small mb-3">
+                <span>近 {{ recent_average.games }} 场场均得分 <strong>{{ stat(recent_average.points) }}</strong></span>
+                {% if summary.games > recent_average.games %}
+                <span class="text-secondary">赛季场均 {{ stat(summary.points) }} 分</span>
+                {% endif %}
+            </div>
+            {% if performance.recent|length > 1 %}
+            <div id="profileTrend" hidden>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <label for="profileTrendMetric" class="small text-secondary">走势</label>
+                    <select id="profileTrendMetric" class="form-select form-select-sm w-auto">
+                        <option value="points">得分</option>
+                        <option value="rebounds">篮板</option>
+                        <option value="assists">助攻</option>
+                    </select>
+                </div>
+                <div class="profile-chart"><canvas id="profileTrendChart" role="img" aria-label="最近比赛技术统计走势，数据见下方表格"></canvas></div>
+            </div>
+            {% endif %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th scope="col">比赛</th><th scope="col">赛果</th><th scope="col">时间</th><th scope="col">得分</th><th scope="col">篮板</th><th scope="col">助攻</th><th scope="col">投篮</th></tr></thead>
+                    <tbody>
+                    {% for game in performance.recent %}
+                        <tr>
+                            <th scope="row"><a href="{{ url_for('game_detail', game_id=game.game_id, season=season) }}" class="text-nowrap">对 {{ game.opponent }}</a>
+                                <div class="small text-secondary fw-normal">{{ game.game_date }} · {{ game.played_for }}</div>
+                            </th>
+                            <td class="text-nowrap small">{{ "胜" if game.team_score > game.opponent_score else "负" if game.team_score < game.opponent_score else "平" }} {{ game.team_score }}:{{ game.opponent_score }}</td>
+                            <td class="text-nowrap">{{ game.played_seconds // 60 }}:{{ "%02d"|format(game.played_seconds % 60) }}</td>
+                            <td>{{ game.points }}</td><td>{{ game.rebounds }}</td><td>{{ game.assists }}</td>
+                            <td>{{ game.field_goals_made }}/{{ game.field_goals_attempted }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}<p class="text-secondary mb-0">本赛季还没有可查看的完赛记录。</p>{% endif %}
+        </section>
+
+        <section class="profile-panel" aria-labelledby="shot-profile-title">
+            <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0" id="shot-profile-title">出手偏好</h2>
+                {% if shot_total %}<span class="small text-secondary">{{ shot_total }} 次有位置的投篮记录</span>{% endif %}
+            </div>
+            {% if favorite %}
+            <p class="small mb-3">最多出手来自 <strong>{{ favorite.label }}</strong>，占已记录出手的 {{ (favorite.attempts * 100 / shot_total)|round(1) }}%。</p>
+            <ul class="profile-zones">
+                {% for zone in zones|sort(attribute="attempts", reverse=true) %}
+                <li>
+                    <div class="d-flex align-items-baseline justify-content-between gap-2 small">
+                        <span>{{ zone.label }}</span>
+                        {% if zone.attempts %}<span class="text-secondary">{{ zone.made }}/{{ zone.attempts }} · {{ percent(zone.player_pct) }}{% if zone.attempts < 10 %} · 小样本{% endif %}</span>
+                        {% else %}<span class="text-secondary">无出手记录</span>{% endif %}
+                    </div>
+                    <div class="profile-shot-bar" aria-hidden="true"><span style="width: {{ (zone.attempts * 100 / shot_total)|round(1) }}%"></span></div>
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="small text-secondary mb-0">条形长度表示出手占比。出手记录少于 10 次的区域标为小样本。</p>
+            {% else %}<p class="text-secondary mb-0">本赛季暂无带落点的投篮记录。</p>{% endif %}
+        </section>
+    </div>
+
+    {% if performance.seasons or show_contract %}
+    <div class="profile-columns mb-4">
+        {% if performance.seasons %}
+        <section class="profile-panel" aria-labelledby="timeline-title">
+            <h2 class="h5 mb-3" id="timeline-title">历季表现</h2>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th scope="col">赛季</th><th scope="col">出场</th><th scope="col">得分</th><th scope="col">篮板</th><th scope="col">助攻</th><th scope="col">真实命中率</th></tr></thead>
+                    <tbody>
+                    {% for row in performance.seasons %}
+                        <tr>
+                            <th scope="row" class="text-nowrap">
+                                {% if row.season == season %}{{ row.season }}
+                                {% elif row.season in seasons %}<a href="{{ url_for('player_detail', player_id=player.id, season=row.season) }}">{{ row.season }}</a>
+                                {% else %}{{ row.season }}{% endif %}
+                            </th>
+                            <td>{{ row.games }}</td><td>{{ stat(row.points) }}</td><td>{{ stat(row.rebounds) }}</td><td>{{ stat(row.assists) }}</td><td>{{ percent(row.ts_pct) }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {% endif %}
+        {% if show_contract %}
+        <section class="profile-panel" aria-labelledby="contract-title">
+            <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
+                <h2 class="h5 mb-0" id="contract-title">本队合同</h2>
+                <a class="small" href="{{ url_for('salary', season=season) }}">薪资与阵容规划</a>
+            </div>
+            {% if contract %}
+            <dl class="profile-contract mb-0">
+                <div><dt>{{ season }} 年薪</dt><dd>${{ "{:,}".format(contract.season_salary|int) }}</dd></div>
+                <div><dt>合同年份</dt><dd>{{ contract.start_year }} 至 {{ contract.end_year }}</dd></div>
+                <div><dt>末年选项</dt><dd>{{ "球队选项" if contract.team_option else "球员选项" if contract.player_option else "无" }}</dd></div>
+            </dl>
+            {% else %}<p class="text-secondary mb-0">所选赛季没有本队的有效合同。</p>{% endif %}
+        </section>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if performance.recent|length > 1 %}
+<script>
+(() => {
+    if (!window.Chart) return;
+    const section = document.getElementById("profileTrend");
+    const selector = document.getElementById("profileTrendMetric");
+    const rows = {{ performance.recent | reverse | list | tojson }};
+    const muted = getComputedStyle(document.documentElement).getPropertyValue("--bs-secondary-color").trim();
+    const style = getComputedStyle(document.documentElement);
+    const metricNames = {points: "得分", rebounds: "篮板", assists: "助攻"};
+    section.hidden = false;
+    const chart = new Chart(document.getElementById("profileTrendChart"), {
+        type: "line",
+        data: {
+            labels: rows.map(row => row.opponent),
+            datasets: [{
+                label: metricNames.points,
+                data: rows.map(row => row.points),
+                borderColor: style.getPropertyValue("--bs-primary").trim(),
+                backgroundColor: style.getPropertyValue("--bs-primary").trim(),
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true, ticks: { precision: 0, color: muted } }, x: { ticks: { color: muted } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+    selector.addEventListener("change", () => {
+        chart.data.datasets[0].label = metricNames[selector.value];
+        chart.data.datasets[0].data = rows.map(row => row[selector.value]);
+        chart.update();
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

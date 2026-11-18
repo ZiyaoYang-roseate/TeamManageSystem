@@ -1,141 +1,125 @@
 {% extends "base.html" %}
-
-{% block title %}球探选秀 - NBA 球队管理系统{% endblock %}
-
+{% block title %}选秀准备{% endblock %}
 {% block content %}
-<div id="serverSearchScope" data-search-scope="all-draft-picks" hidden></div>
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-    <div>
-        <h1 class="h3 mb-1">球探报告与选秀资产</h1>
-        <div class="text-secondary small">五维能力评估与未来选秀权管理</div>
-    </div>
-</div>
+<header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+    <div><h1 class="h3 mb-1">选秀准备</h1><span class="text-secondary">本队选秀板</span></div>
+    <form method="get" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="season" value="{{ season }}">
+        <div>
+            <label class="form-label" for="draftYear">选秀年份</label>
+            <select class="form-select" name="year" id="draftYear">
+                {% for year in workspace.years %}<option value="{{ year }}"{% if year == workspace.year %} selected{% endif %}>{{ year }}</option>{% endfor %}
+            </select>
+        </div>
+        <button class="btn btn-outline-secondary">切换</button>
+    </form>
+</header>
 
-<form class="row g-3 align-items-end mb-4" method="get">
-    {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
-    <input type="hidden" name="page" value="1">
-    <input type="hidden" name="per_page" value="{{ per_page }}">
-    <div class="col-md-5">
-        <label for="player_id" class="form-label">选择球员</label>
-        <select class="form-select" id="player_id" name="player_id" onchange="this.form.submit()">
-            {% for report in reports %}
-            <option value="{{ report.player_id }}" {% if selected and report.player_id == selected.player_id %}selected{% endif %}>
-                {{ report.player_name }} · {{ report.team_name }}
-            </option>
-            {% endfor %}
-        </select>
+<section class="row g-3 mb-4">
+    <div class="col-md-6">
+        <h2 class="h5">本队补强依据</h2>
+        <div>比赛数据关注项：{{ workspace.priorities | join('、') or "暂无明确短板" }} <span class="text-secondary small">（{{ season }} 赛季 {{ workspace.games }} 场对照样本）</span></div>
+        <div>选秀前到期合同：{% for item in workspace.expiring %}{{ item.position }} {{ item.total }} 人{% if not loop.last %} · {% endif %}{% else %}暂无{% endfor %}</div>
+        <a class="small" href="{{ url_for('salary', season=season) }}">查看逐年合同</a>
     </div>
+    <div class="col-md-6">
+        <h2 class="h5">本队签位记录</h2>
+        {% for pick in workspace.picks %}
+        <div>{{ "首轮" if pick.round == 1 else "次轮" }} · {{ {"Own": "持有", "Traded": "已交易"}.get(pick.status, pick.status) }} · {{ pick.protection }}{% if workspace.draft_order and pick.status == "Own" %} · 参考第 {{ workspace.draft_order.placement + (pick.round - 1) * workspace.draft_order.teams_count }} 顺位{% endif %}</div>
+        {% else %}<div class="text-secondary">该届暂无本队签位记录。</div>{% endfor %}
+        {% if workspace.picks %}<span class="text-secondary small">参考顺位按对应赛季完赛胜率从低到高估算，同胜率按球队编号排列；正式顺位待发布。</span>{% endif %}
+    </div>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5">本队优先顺序</h2>
+    {% set ranked = workspace.prospects | rejectattr('priority', 'none') | list %}
+    {% if ranked %}
+    <ol class="list-group mb-3">
+        {% for item in ranked %}
+        <li class="list-group-item"><strong>{{ item.priority }} · {{ item.name }}</strong> <span class="text-secondary">{{ item.role_note }}</span>
+            {% if item.notes %}<div class="small mt-1">{{ item.notes }}</div>{% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}<p class="text-secondary">从候选池加入首选和备选，设置优先顺序与预期角色。</p>{% endif %}
+</section>
+
+{% if comparison %}
+<section id="comparison" class="border rounded p-3 mb-4">
+    <h2 class="h5">候选比较 · {{ "AI 整理" if comparison.source == "model" else "规则整理" }}</h2>
+    <p class="small text-secondary">本队需要和候选表现使用不同数据源。每 36 分钟指标只用于初筛，试训再确认能力能否转化。</p>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>候选与外部样本</th>{% if comparison.axis %}<th>{{ comparison.axis }}</th>{% endif %}<th>到队用法与验证</th></tr></thead>
+            <tbody>
+                {% for item in comparison.candidates %}
+                <tr><th scope="row"><strong>{{ item.name }} · {{ item.position }}</strong><div class="small fw-normal">{{ item.source }} · {{ item.games }} 场、场均 {{ item.minutes }} 分钟</div></th>
+                    {% if comparison.axis %}<td>{{ item.rate if item.rate is not none else "待补资料" }}{% if not item.supported and item.rate is not none %}<div class="small text-secondary">小样本</div>{% endif %}</td>{% endif %}
+                    <td>{% if item.fields.role %}<div>{{ item.fields.role }}</div>{% endif %}
+                        <div class="small text-secondary">{{ item.readout }}</div>
+                        {% if item.fields.test %}<div class="small mt-1"><strong>试训</strong> {{ item.fields.test }}</div>{% endif %}
+                        {% if item.focus %}<div class="small mt-1"><strong>优先核对</strong> {{ item.focus }}</div>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<h2 class="h5">候选池</h2>
+{% if workspace.prospects %}
+<form method="post" action="{{ url_for('scouting', season=season, year=workspace.year) }}#comparison" id="compareProspects" class="mb-3">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="year" value="{{ workspace.year }}">
+    <button class="btn btn-outline-primary" name="action" value="compare">比较勾选的候选人</button>
+    <span class="small text-secondary ms-2">选择 2 至 3 名</span>
 </form>
-
-<div class="row g-4">
-    <div class="col-lg-5">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                {% if selected %}
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                    <div>
-                        <div class="h5 mb-1">{{ selected.player_name }}</div>
-                        <div class="text-secondary small">{{ selected.team_name }} · {{ selected.position }}</div>
+<div class="row row-cols-1 row-cols-xl-2 g-3">
+    {% for item in workspace.prospects %}
+    <div class="col">
+        <article class="card card-body h-100">
+            <label for="prospect-{{ item.id }}" class="h6">
+                <input class="form-check-input me-2" id="prospect-{{ item.id }}" form="compareProspects" type="checkbox" name="candidate" value="{{ item.id }}"{% if comparison and item.id in comparison.selected %} checked{% endif %}>
+                {{ item.name }} · {{ item.position }}
+            </label>
+            <p class="small text-secondary mb-1">{{ item.profile.source }} · {{ item.games }} 场 · 场均 {{ item.minutes }} 分钟</p>
+            <p class="small mb-1">场均助攻 {{ item.assists }} / 失误 {{ item.turnovers }} / 篮板 {{ item.rebounds }} / 三分命中 {{ item.threes }}</p>
+            {% if item.profile.external %}
+            <dl class="small mb-3">
+                {% for key, label in [('strength', '技术特点'), ('role', '上场用法'), ('risk', '适应风险'), ('test', '试训验证')] %}
+                <div><dt class="d-inline">{{ label }}</dt><dd class="d-inline ms-1">{{ item.profile.fields[key] }}</dd></div>
+                {% endfor %}
+            </dl>
+            {% else %}
+            <p class="small text-secondary">外部样本出处或球探档案待补齐。{{ item.profile.legacy_note }}</p>
+            {% endif %}
+            <form method="post" action="{{ url_for('scouting', season=season, year=workspace.year) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="year" value="{{ workspace.year }}">
+                <input type="hidden" name="prospect_id" value="{{ item.id }}">
+                <div class="row g-2 mb-2">
+                    <div class="col-4">
+                        <label for="priority-{{ item.id }}" class="form-label small">优先顺序</label>
+                        <input class="form-control" id="priority-{{ item.id }}" name="priority" type="number" min="1" max="{{ workspace.next_rank if not item.priority else workspace.next_rank - 1 }}" value="{{ item.priority or '' }}" placeholder="末位">
                     </div>
-                    <div class="text-end">
-                        <div class="text-secondary small">Overall</div>
-                        <div class="h4 mb-0">{{ selected.overall_rating }}</div>
+                    <div class="col-8">
+                        <label for="role-{{ item.id }}" class="form-label small">预期角色</label>
+                        <input class="form-control" id="role-{{ item.id }}" name="role_note" maxlength="120" value="{{ item.role_note or '' }}">
                     </div>
                 </div>
-                <canvas id="scoutRadar" height="260"></canvas>
-                <div class="text-secondary small mt-3">{{ selected.notes }}</div>
-                {% else %}
-                <div class="text-muted py-5 text-center">暂无球探报告</div>
-                {% endif %}
-            </div>
-        </div>
+                <label for="notes-{{ item.id }}" class="form-label small">本队观察笔记</label>
+                <textarea class="form-control mb-2" id="notes-{{ item.id }}" name="notes" rows="2" maxlength="600">{{ item.notes or '' }}</textarea>
+                <button class="btn btn-primary btn-sm" name="action" value="save">{{ "保存选秀板记录" if item.priority else "加入本队选秀板" }}</button>
+                {% if item.priority %}<button class="btn btn-outline-danger btn-sm" name="action" value="remove" formnovalidate>移除</button>{% endif %}
+            </form>
+        </article>
     </div>
-    <div class="col-lg-7">
-        <h2 class="h5 mb-3">选秀权资产</h2>
-        <div class="card shadow-sm">
-            <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span class="small text-secondary">
-                    {% if search %}
-                        在全部选秀权中搜索“{{ search }}”，共找到 {{ total }} 条
-                    {% else %}
-                        按赛季降序展示全部选秀权，共 {{ total }} 条
-                    {% endif %}
-                </span>
-                {% if search %}
-                <a href="{{ url_for('scouting', player_id=selected.player_id if selected else None, per_page=per_page) }}" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-x-lg me-1"></i>清除搜索
-                </a>
-                {% endif %}
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>球队</th>
-                            <th>赛季</th>
-                            <th>轮次</th>
-                            <th>顺位</th>
-                            <th>保护条款</th>
-                            <th>状态</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for pick in draft_picks %}
-                        <tr>
-                            <td class="text-nowrap">{{ pick.team_name }} ({{ pick.abbreviation }})</td>
-                            <td>{{ pick.season }}</td>
-                            <td>{{ "首轮" if pick.round == 1 else "次轮" }}</td>
-                            <td>#{{ pick.pick_number }}</td>
-                            <td>{{ pick.protection }}</td>
-                            <td>
-                                <span class="badge {{ 'text-bg-success' if pick.status == 'Own' else 'text-bg-secondary' }}">{{ pick.status }}</span>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% include "_pagination.html" %}
-    </div>
+    {% endfor %}
 </div>
-
-<script>
-{% if selected %}
-const ctx = document.getElementById("scoutRadar");
-new Chart(ctx, {
-    type: "radar",
-    data: {
-        labels: ["得分", "防守", "组织", "身体素质", "战术IQ"],
-        datasets: [{
-            label: "{{ selected.player_name }}",
-            data: [
-                {{ selected.scoring }},
-                {{ selected.defense }},
-                {{ selected.playmaking }},
-                {{ selected.athleticism }},
-                {{ selected.basketball_iq }}
-            ],
-            fill: true,
-            backgroundColor: "rgba(13, 110, 253, 0.18)",
-            borderColor: "#0d6efd",
-            pointBackgroundColor: "#0d6efd",
-            pointBorderColor: "#fff",
-            pointHoverBackgroundColor: "#fff",
-            pointHoverBorderColor: "#0d6efd"
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            r: {
-                min: 0,
-                max: 100,
-                ticks: { stepSize: 20 }
-            }
-        }
-    }
-});
+{% else %}
+<p class="text-secondary">该届候选池尚未发布。联赛运营管理员可以在运营台录入候选人。</p>
 {% endif %}
-</script>
 {% endblock %}

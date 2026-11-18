@@ -29,6 +29,32 @@ class ReliabilityTests(unittest.TestCase):
             self.assertEqual(response.status_code, 403)
             overview.assert_not_called()
 
+    def test_private_workspaces_reject_non_managers_before_querying(self):
+        for role in ("league_admin", "scorekeeper"):
+            self.manager.update(role=role, team_id=None)
+            with self.subTest(role=role), patch("team_planning.transaction") as tx:
+                self.assertEqual(self.client.get("/salary").status_code, 403)
+                self.assertEqual(self.client.get("/scouting").status_code, 403)
+                self.assertEqual(self.client.post("/scouting", headers=self.headers).status_code, 403)
+                self.assertEqual(self.client.post("/api/salary/preview/trade", json={}, headers=self.headers).status_code, 403)
+                tx.assert_not_called()
+
+    def test_both_business_date_urls_require_league_admin(self):
+        for role in ("management", "scorekeeper"):
+            self.manager["role"] = role
+            for url in ("/league/business-date", "/scorekeeper/calendar/date"):
+                with self.subTest(role=role, url=url), patch.object(app, "transaction") as tx:
+                    self.assertEqual(self.client.post(url, headers=self.headers).status_code, 403)
+                    tx.assert_not_called()
+
+    def test_league_admin_cannot_access_team_pregame_analysis_or_submit_starters(self):
+        self.manager.update(role="league_admin", team_id=None)
+        with patch("analysis_routes.transaction") as tx:
+            self.assertEqual(self.client.get("/games/20/analysis/scout").status_code, 403)
+            self.assertEqual(self.client.post("/games/20/starters", headers=self.headers).status_code, 403)
+            self.assertEqual(self.client.post("/games/20/availability", headers=self.headers).status_code, 403)
+            tx.assert_not_called()
+
     def test_team_info_write_requires_ownership(self):
         with patch.object(app, "get_team_or_404") as get_team:
             response = self.client.post("/teams/edit/20", headers=self.headers)

@@ -1,0 +1,71 @@
+.player-profile .profile-hero {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 1.25rem;
+    align-items: center;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+}
+.player-profile .profile-jersey {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    width: clamp(4rem, 11vw, 6.25rem);
+    aspect-ratio: 1;
+    color: var(--bs-primary-text-emphasis);
+    background: var(--bs-primary-bg-subtle);
+    border-radius: .75rem;
+}
+.player-profile .profile-jersey span { font-size: .72rem; font-weight: 700; }
+.player-profile .profile-jersey strong { font-variant-numeric: tabular-nums; font-size: clamp(1.5rem, 4vw, 2.8rem); line-height: 1; }
+.player-profile .profile-identity { min-width: 0; }
+.player-profile h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); margin: 0 0 .5rem; font-weight: 750; overflow-wrap: anywhere; }
+.player-profile .profile-bio,
+.player-profile .profile-tools,
+.player-profile .profile-secondary,
+.player-profile .profile-recent-summary {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: .8rem;
+    row-gap: .35rem;
+}
+.player-profile .profile-bio { color: var(--bs-secondary-color); font-size: .88rem; }
+.player-profile .profile-tools { justify-content: flex-end; }
+.player-profile .profile-stats {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    padding: .8rem 0;
+    border-block: 1px solid var(--bs-border-color);
+    margin-bottom: .6rem;
+}
+.player-profile .profile-stats div { padding: .25rem .85rem; border-inline-end: 1px solid var(--bs-border-color); }
+.player-profile .profile-stats div:last-child { border-inline-end: 0; }
+.player-profile .profile-stats dt { font-size: .82rem; color: var(--bs-secondary-color); font-weight: 500; }
+.player-profile .profile-stats dd { font-size: clamp(1.25rem, 2.5vw, 1.8rem); margin: .2rem 0 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.player-profile .profile-columns { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 1rem; }
+.player-profile .profile-panel {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .8rem;
+    background: var(--bs-body-bg);
+}
+.player-profile .profile-panel:only-child { grid-column: 1 / -1; }
+.player-profile .profile-chart { position: relative; height: 130px; margin-bottom: 1rem; }
+.player-profile .profile-zones { display: grid; list-style: none; padding: 0; gap: .7rem; }
+.player-profile .profile-shot-bar { height: .32rem; background: var(--bs-tertiary-bg); border-radius: 1rem; margin-top: .25rem; overflow: hidden; }
+.player-profile .profile-shot-bar span { display: block; height: 100%; background: var(--bs-primary); }
+.player-profile .profile-contract div { display: flex; justify-content: space-between; gap: .8rem; padding: .42rem 0; }
+.player-profile .profile-contract dt { color: var(--bs-secondary-color); font-weight: 500; }
+.player-profile .profile-contract dd { margin-bottom: 0; font-weight: 600; }
+@media (max-width: 1199px) {
+    .player-profile .profile-hero { grid-template-columns: auto 1fr; }
+    .player-profile .profile-tools { grid-column: 1 / -1; justify-content: flex-start; }
+    .player-profile .profile-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 650px) {
+    .player-profile .profile-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: .45rem; }
+    .player-profile .profile-stats div:nth-child(3) { border-inline-end: 0; }
+}

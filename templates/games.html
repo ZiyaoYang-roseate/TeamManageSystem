@@ -39,6 +39,8 @@
                         <span class="badge text-bg-success">进行中</span>
                         {% elif game.status == 'scheduled' %}
                         <span class="badge text-bg-warning">待开始</span>
+                        {% elif game.status == 'cancelled' %}
+                        <span class="badge text-bg-secondary">已取消</span>
                         {% else %}
                         <span class="badge text-bg-secondary">已结束</span>
                         {% endif %}
@@ -57,14 +59,14 @@
                             查看技术统计
                         </a>
                         {% if current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
-                        {% if can_edit_team(game.home_team_id) or can_edit_team(game.away_team_id) %}
+                        {% if current_user.role == ROLE_MANAGEMENT and game.status != 'cancelled' and (can_edit_team(game.home_team_id) or can_edit_team(game.away_team_id)) %}
                         <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='scout') }}" class="btn btn-sm btn-outline-primary">赛前分析</a>
                         {% endif %}
                         {% if game.status == 'finished' %}
                         <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='review') }}" class="btn btn-sm btn-outline-primary">赛后复盘</a>
                         {% endif %}
                         {% endif %}
-                        {% if current_user and current_user.role == ROLE_SCOREKEEPER %}
+                        {% if current_user and current_user.role == ROLE_SCOREKEEPER and game.status != 'cancelled' %}
                         <a href="{{ url_for('scorekeeper_game', game_id=game.id) }}" class="btn btn-sm btn-outline-success ms-1">
                             {% if game.status == 'live' %}继续计分{% elif game.status == 'scheduled' %}进入{% else %}计分面板{% endif %}
                         </a>

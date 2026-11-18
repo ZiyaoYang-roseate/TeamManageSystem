@@ -1,0 +1,61 @@
+.shot-analysis {
+    --court-bg: #c89258;
+    --court-line: #4b321f;
+}
+.shot-analysis .shot-panel {
+    min-width: 0;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .8rem;
+    padding: clamp(.8rem, 2vw, 1.1rem);
+}
+.shot-analysis .shot-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.28fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+}
+.shot-analysis .shot-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .65rem;
+    border-block: 1px solid var(--bs-border-color);
+    padding: .8rem 0;
+}
+.shot-analysis .shot-summary > div { display: grid; gap: .25rem; padding-inline: .35rem; }
+.shot-analysis .shot-summary strong { font-size: clamp(1rem, 2.5vw, 1.55rem); font-variant-numeric: tabular-nums; }
+.shot-analysis .shot-summary .shot-sample { font-size: clamp(.85rem, 1.8vw, 1.2rem); }
+.shot-analysis .shot-court { display: block; width: 100%; max-height: 450px; background: var(--court-bg); border-radius: .45rem; }
+.shot-analysis .shot-court-lines {
+    fill: none;
+    stroke: var(--court-line);
+    stroke-width: 1.6;
+    pointer-events: none;
+}
+.shot-analysis .zone-fill { stroke: var(--court-line); stroke-width: .8; fill: var(--zone-tone); }
+.shot-analysis .shot-court a[aria-current="true"] path { stroke: #fff9e7; stroke-width: 2; }
+.shot-analysis .shot-court a:hover path,
+.shot-analysis .shot-court a:focus-visible path { stroke: white; stroke-width: 3; }
+.shot-analysis .shot-court-labels {
+    pointer-events: none;
+    fill: white;
+    stroke: #261d18;
+    stroke-width: 1.8px;
+    paint-order: stroke;
+    font-size: 10px;
+    font-weight: 700;
+}
+.shot-analysis .tone-empty { --zone-tone: #665747; }
+.shot-analysis .tone-low { --zone-tone: #817563; }
+.shot-analysis .tone-medium { --zone-tone: #1b7a81; }
+.shot-analysis .tone-high { --zone-tone: #114c60; }
+.shot-analysis .tone-higher { --zone-tone: #944a27; }
+.shot-analysis .tone-near { --zone-tone: #7a673f; }
+.shot-analysis .tone-lower { --zone-tone: #315982; }
+.shot-analysis .tone-limited { --zone-tone: #706b63; }
+.shot-analysis .shot-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-top: .7rem; color: var(--bs-secondary-color); }
+.shot-analysis .shot-legend li { display: flex; align-items: center; gap: .35rem; }
+.shot-analysis .shot-swatch { height: .65rem; width: .65rem; border-radius: .16rem; background: var(--zone-tone); }
+.shot-analysis td { font-variant-numeric: tabular-nums; }
+.shot-analysis #shot-details:target { border-color: var(--bs-primary); }
+@media (max-width: 1050px) { .shot-analysis .shot-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 575px) { .shot-analysis .shot-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

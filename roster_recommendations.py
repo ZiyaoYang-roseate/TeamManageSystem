@@ -1,11 +1,10 @@
-import json
 from collections import Counter, defaultdict
 
 from analysis_model import configured_model, generate_content
 from basketball_fit import METRICS, display_profile, per_36, player_profiles, reliable, team_priorities
 from db import transaction
 from roster import max_contract_salary, season_salary_sql, team_payroll
-from trade import salary_matching_max, validate_trade
+from trade import decode_proposal_side, salary_matching_max, validate_trade
 
 
 PLAN_LIMIT = 3
@@ -111,12 +110,17 @@ def _recommend(kind, candidates, games, priorities, empty_message):
 
 
 def trade_recommendations(team_id, season):
+    candidates, games, priorities, message = trade_candidates(team_id, season)
+    return _recommend("trade_options", candidates, games, priorities, message)
+
+
+def trade_candidates(team_id, season, limit=SHORTLIST_LIMIT, reserve_salary=0):
     year = int(season.split("-", 1)[0])
     with transaction() as connection, connection.cursor() as cursor:
         cursor.execute("SELECT cap_amount, luxury_tax_line FROM salary_caps WHERE season = %s", (season,))
         cap = cursor.fetchone()
         if not cap:
-            return _recommend("trade_options", [], 0, [], "该赛季缺少工资帽数据。")
+            return [], 0, [], "该赛季缺少工资帽数据。"
         cap_amount = int(cap["cap_amount"])
         cursor.execute(
             f"""
@@ -126,6 +130,7 @@ def trade_recommendations(team_id, season):
             JOIN users u ON u.team_id = t.id AND u.role = 'management'
             LEFT JOIN contracts c ON c.active_player_id = p.id AND c.team_id = p.team_id
                 AND c.start_year <= %s AND c.end_year >= %s
+            WHERE p.archived_at IS NULL AND t.archived_at IS NULL
             ORDER BY p.id
             """,
             (year, year, year),
@@ -149,12 +154,10 @@ def trade_recommendations(team_id, season):
         )
         pending = set()
         for row in cursor.fetchall():
-            try:
-                sent, received = (json.loads(row[key]) for key in ("proposer_outgoing", "receiver_outgoing"))
-                if len(sent) == len(received) == 1:
-                    pending.add((row["receiver_team_id"], int(sent[0]), int(received[0])))
-            except (ValueError, TypeError, KeyError, IndexError):
-                continue
+            sent, _ = decode_proposal_side(row["proposer_outgoing"])
+            received, _ = decode_proposal_side(row["receiver_outgoing"])
+            if len(sent) == len(received) == 1:
+                pending.add((row["receiver_team_id"], sent[0], received[0]))
         rosters = defaultdict(list)
         for player in players:
             rosters[player["team_id"]].append(player)
@@ -175,18 +178,20 @@ def trade_recommendations(team_id, season):
                 validation = validate_trade(payload, cursor)
                 if not validation["is_valid"]:
                     continue
+                salary = validation["team1_summary"]
+                if reserve_salary and own_payroll + salary["incoming"] - salary["outgoing"] + reserve_salary > cap["luxury_tax_line"]:
+                    continue
                 used_incoming.add(incoming["id"])
                 used_outgoing.add(outgoing["id"])
                 candidates.append(_trade_plan(
-                    payload, outgoing, incoming, metric, validation["team1_summary"],
+                    payload, outgoing, incoming, metric, salary,
                     depth, priorities, own_payroll, int(cap["luxury_tax_line"]),
                 ))
-                if len(candidates) == SHORTLIST_LIMIT:
+                if len(candidates) == limit:
                     break
-            if len(candidates) == SHORTLIST_LIMIT:
+            if len(candidates) == limit:
                 break
-    return _recommend("trade_options", candidates, games, priorities,
-                      "当前没有同时满足薪资配平、阵容覆盖和数据筛选条件的一换一方案。")
+    return candidates, games, priorities, "当前没有同时满足薪资配平、阵容覆盖和数据筛选条件的一换一方案。"
 
 
 def _trade_pairs(team_id, rosters, payroll, cap, priorities, pending):
@@ -348,7 +353,7 @@ def signing_recommendations(team_id, season):
             needed = _money(TRIAL_SALARY - remaining)
             return _recommend("signing_options", [], games, priorities,
                               f"当前预算不足，还需腾出 {needed} 才能提交建议起始报价。")
-        cursor.execute("SELECT id, name, position, age, team_id FROM players WHERE team_id = %s OR team_id IS NULL ORDER BY id", (team_id,))
+        cursor.execute("SELECT id, name, position, age, team_id FROM players WHERE archived_at IS NULL AND (team_id = %s OR team_id IS NULL) ORDER BY id", (team_id,))
         players = cursor.fetchall()
         own = [player for player in players if player["team_id"] == team_id]
         if len(own) >= 15:

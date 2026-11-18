@@ -9,6 +9,7 @@ from flask import abort
 from caching import invalidate_all
 from db import fetch_all, fetch_one, transaction
 from game_analysis import awaiting_starters, published_starters
+from roster import lock_teams
 from validation import BusinessError, bounded_float, bounded_int
 
 
@@ -171,7 +172,7 @@ def _scorekeeper_roster(game_id, team_id):
         FROM players p
         LEFT JOIN player_game_stats s
             ON s.player_id = p.id AND s.game_id = %s
-        WHERE p.team_id = %s
+        WHERE p.team_id = %s AND p.archived_at IS NULL
         ORDER BY p.jersey_number, p.id
         """,
         (game_id, team_id),
@@ -728,7 +729,7 @@ def set_lineup(game_id, payload):
                 f"""
                 SELECT id, team_id
                 FROM players
-                WHERE id IN ({placeholders})
+                WHERE id IN ({placeholders}) AND archived_at IS NULL
                 FOR UPDATE
                 """,
                 tuple(player_ids),
@@ -962,6 +963,16 @@ def finish_game(game_id):
 def start_game(game_id):
     with transaction() as connection:
         with connection.cursor() as cursor:
+            cursor.execute("SELECT home_team_id, away_team_id, status FROM games WHERE id = %s", (game_id,))
+            fixture = cursor.fetchone()
+            if fixture is None:
+                raise ScorekeeperError("比赛不存在", 404)
+            if fixture["status"] in {"finished", "cancelled"}:
+                raise ScorekeeperError("比赛已完赛或取消，无法开赛", 409)
+            try:
+                lock_teams(cursor, fixture["home_team_id"], fixture["away_team_id"])
+            except BusinessError as exc:
+                raise ScorekeeperError(str(exc), exc.status_code) from exc
             cursor.execute(
                 """
                 SELECT g.id, g.season, g.status, g.home_score, g.away_score,
@@ -979,6 +990,8 @@ def start_game(game_id):
                 raise ScorekeeperError("比赛不存在", 404)
             if game["status"] == "finished":
                 raise ScorekeeperError("比赛已结束，无法重新开始", 409)
+            if game["status"] == "cancelled":
+                raise ScorekeeperError("比赛已取消，无法开赛", 409)
             resuming = game["status"] == "live"
             if resuming and game["starters_initialized"]:
                 return {

@@ -45,7 +45,7 @@
                         Q{{ event.period }} {{ (event.seconds_remaining // 60) }}:{{ "%02d" | format(event.seconds_remaining % 60) }}
                     </td>
                     <td>{{ event.team_abbr }}</td>
-                    <td>{{ event.description }}{% if event.voided_at %}<div class="small text-warning-emphasis">已撤销 · {{ event.correction_reason }} · {{ event.voided_at }}</div>{% endif %}</td>
+                    <td>{{ event.description | chinese_names_in_text }}{% if event.voided_at %}<div class="small text-warning-emphasis">已撤销 · {{ event.correction_reason }} · {{ event.voided_at }}</div>{% endif %}</td>
                     <td class="fw-semibold">{% if event.voided_at %}—{% else %}{{ event.score_home }} : {{ event.score_away }}{% endif %}</td>
                 </tr>
                 {% else %}

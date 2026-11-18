@@ -19,7 +19,7 @@
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-start mb-4">
                         <div>
-                            <div class="h4 mb-1">{{ team.name }}</div>
+                            <div class="h4 mb-1">{{ team.name }}{% if team.archived_at %} <span class="badge text-bg-secondary">已归档</span>{% endif %}</div>
                             <div class="text-secondary">{{ team.city }} · {{ team.abbreviation }}</div>
                         </div>
                         <span class="badge text-bg-primary">#{{ team.id }}</span>

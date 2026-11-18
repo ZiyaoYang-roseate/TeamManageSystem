@@ -6,6 +6,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 from analysis_model import ACTIONS, PROMPT_VERSION, configured_model, generate_content, rules_report
 from auth import ROLE_LEAGUE_ADMIN, ROLE_MANAGEMENT
 from db import fetch_all, fetch_one, transaction
+from demo_names import chinese_names_in_text
 from game_analysis import AVAILABILITY_LABELS, METRICS_VERSION, awaiting_starters, encode, fingerprint, get_game, load_evidence
 from security import can_edit_team
 from validation import BusinessError, bounded_int, choice
@@ -18,18 +19,20 @@ TITLES = {"review": "赛后复盘", "scout": "赛前分析"}
 def _context(game_id, kind=None, saved_team=None):
     if kind is not None and kind not in TITLES:
         abort(404)
+    if g.user["role"] not in {ROLE_LEAGUE_ADMIN, ROLE_MANAGEMENT}:
+        abort(403)
+    if kind == "scout" and g.user["role"] != ROLE_MANAGEMENT:
+        abort(403, "赛前分析仅向参赛球队的管理层开放")
     with transaction() as connection, connection.cursor() as cursor:
         game = get_game(cursor, game_id)
     if game is None:
         abort(404)
     teams = {game["home_team_id"]: game["home_team_name"], game["away_team_id"]: game["away_team_name"]}
-    if g.user["role"] not in {ROLE_LEAGUE_ADMIN, ROLE_MANAGEMENT}:
-        abort(403)
     default_team = g.user.get("team_id")
     if default_team not in teams:
         default_team = game["home_team_id"]
     team_id = saved_team if saved_team is not None else request.args.get("team", default_team, type=int)
-    if kind == "scout" and g.user["role"] == ROLE_MANAGEMENT and team_id != g.user.get("team_id"):
+    if kind == "scout" and team_id != g.user.get("team_id"):
         abort(403, "仅能查看本队视角的赛前分析")
     if team_id not in teams:
         abort(404, "该球队未参加本场比赛")
@@ -110,7 +113,7 @@ def _render(game, team_id, teams, snapshot, report=None):
             FROM players p LEFT JOIN game_player_availability a
                 ON a.game_id = %s AND a.player_id = p.id AND a.team_id = p.team_id
             LEFT JOIN game_starters s ON s.game_id = %s AND s.player_id = p.id AND s.team_id = p.team_id
-            WHERE p.team_id IN ({placeholders}) ORDER BY p.team_id, p.name
+            WHERE p.team_id IN ({placeholders}) AND p.archived_at IS NULL ORDER BY p.team_id, p.name
             """,
             (game["id"], game["id"], *editable_teams),
         )
@@ -137,7 +140,7 @@ def publish_availability(game_id):
         game = cursor.fetchone()
         if not game or game["status"] != "scheduled":
             raise BusinessError("仅能在开赛前更新出勤公告", 409)
-        cursor.execute("SELECT team_id FROM players WHERE id = %s FOR UPDATE", (player_id,))
+        cursor.execute("SELECT team_id FROM players WHERE id = %s AND archived_at IS NULL FOR UPDATE", (player_id,))
         player = cursor.fetchone()
         if not player or player["team_id"] not in teams or not can_edit_team(player["team_id"]):
             abort(403)
@@ -185,7 +188,7 @@ def publish_starters(game_id):
             SELECT p.id FROM players p
             LEFT JOIN game_player_availability a
                 ON a.game_id = %s AND a.player_id = p.id AND a.team_id = p.team_id
-            WHERE p.team_id = %s AND p.id IN (%s, %s, %s, %s, %s)
+            WHERE p.team_id = %s AND p.archived_at IS NULL AND p.id IN (%s, %s, %s, %s, %s)
               AND (a.status IS NULL OR a.status NOT IN ('injured', 'rest'))
             FOR UPDATE
             """,
@@ -254,4 +257,12 @@ def report_detail(game_id, report_id):
         abort(404)
     game, team_id, teams = _context(game_id, report["kind"], saved_team=report["team_id"])
     report["content"] = json.loads(report["content"]) if report["content"] else None
-    return _render(game, team_id, teams, json.loads(report["evidence"]), report)
+    return _render(game, team_id, teams, _localize_saved_evidence(json.loads(report["evidence"])), report)
+
+
+def _localize_saved_evidence(value):
+    if isinstance(value, dict):
+        return {key: _localize_saved_evidence(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_localize_saved_evidence(item) for item in value]
+    return chinese_names_in_text(value) if isinstance(value, str) else value

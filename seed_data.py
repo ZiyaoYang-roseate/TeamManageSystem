@@ -3,6 +3,9 @@ import math
 import random
 from datetime import date, timedelta
 
+from demo_names import TEAM_NAMES, chinese_name
+from draft_profiles import DEMO_ROWS
+
 
 TEAMS = [
     ("Los Angeles", "Lakers", "LAL", 1947, "Crypto.com Arena"),
@@ -100,7 +103,8 @@ POSITION_RANGES = {
 def insert_teams(connection):
     team_ids = {}
     with connection.cursor() as cursor:
-        for city, name, abbreviation, founded_year, arena in TEAMS:
+        for _, _, abbreviation, founded_year, _ in TEAMS:
+            city, name, arena = TEAM_NAMES[abbreviation]
             cursor.execute(
                 """
                 INSERT INTO teams (city, name, abbreviation, founded_year, arena)
@@ -124,7 +128,7 @@ def insert_coaches(connection, team_ids, rng):
                 """,
                 (
                     team_ids[abbreviation],
-                    name,
+                    chinese_name(name),
                     rng.choice(NATIONALITIES),
                     rng.randint(3, 16),
                 ),
@@ -158,7 +162,7 @@ def insert_players(connection, team_ids, rng):
                 """,
                 (
                     team_ids[team_abbr],
-                    name,
+                    chinese_name(name),
                     jersey_number,
                     position,
                     rng.randint(21, 35),
@@ -196,154 +200,34 @@ def insert_free_agents(connection, rng):
                      weight_kg, nationality, salary)
                 VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (name, jersey_number, position, age, height_cm, weight_kg, nationality, salary),
+                (chinese_name(name), jersey_number, position, age, height_cm, weight_kg, nationality, salary),
             )
             ids.append(cursor.lastrowid)
     connection.commit()
     return ids
 
 
-def build_stat_line(rng, game_id, player_id, team_id, position, team_score, point_diff):
-    weights = {"PG": 1.25, "SG": 1.15, "SF": 1.0, "PF": 0.9, "C": 0.8}
-    weight = weights[position] * rng.uniform(0.78, 1.2)
-    points = max(0, int(round(team_score * weight / 10.2)))
-    points = min(points, 36)
-
-    three_points_made = min(rng.randint(0, 5), points // 3)
-    two_point_target = points - 3 * three_points_made
-    free_throws_made = rng.randint(0, two_point_target)
-    if (two_point_target - free_throws_made) % 2:
-        free_throws_made = max(0, free_throws_made - 1)
-    field_goals_made = (two_point_target - free_throws_made) // 2
-    free_throws_attempted = free_throws_made + rng.randint(0, 3)
-
-    return (
-        game_id,
-        player_id,
-        team_id,
-        rng.randint(22, 40),
-        points,
-        rng.randint(0, 15) + (6 if position in ("PF", "C") else 1),
-        rng.randint(0, 12) + (5 if position in ("PG", "SG") else 1),
-        rng.randint(0, 4),
-        rng.randint(0, 4) + (1 if position in ("PF", "C") else 0),
-        rng.randint(0, 5),
-        rng.randint(0, 5),
-        0,
-        0,
-        field_goals_made,
-        field_goals_made + rng.randint(3, 15),
-        three_points_made,
-        free_throws_made,
-        free_throws_attempted,
-        int(point_diff * rng.uniform(0.15, 0.5)) + rng.randint(-5, 5),
-    )
-
-
-def build_shot_attempt(rng, game_id, player_id, team_id):
-    zone_weights = [
-        ("Restricted Area", 0.20),
-        ("In The Paint (Non-RA)", 0.18),
-        ("Mid-Range", 0.25),
-        ("Left Corner 3PT", 0.11),
-        ("Right Corner 3PT", 0.11),
-        ("Above The Break 3PT", 0.15),
-    ]
-    zones = [zone for zone, _ in zone_weights]
-    weights = [weight for _, weight in zone_weights]
-    zone = rng.choices(zones, weights=weights, k=1)[0]
-
-    if zone == "Restricted Area":
-        x = rng.randint(-55, 55)
-        y = rng.randint(0, 120)
-        shot_type = rng.choice(["Dunk", "Layup"])
-        made_chance = 0.68
-    elif zone == "In The Paint (Non-RA)":
-        x = rng.randint(-100, 100)
-        y = rng.randint(130, 280)
-        shot_type = rng.choice(["Layup", "Floater"])
-        made_chance = 0.54
-    elif zone == "Mid-Range":
-        x = rng.randint(-220, 220)
-        y = rng.randint(280, 390)
-        shot_type = rng.choice(["Pull-up", "Floater", "Post-Up"])
-        made_chance = 0.42
-    elif zone == "Left Corner 3PT":
-        x = rng.randint(-250, -190)
-        y = rng.randint(350, 470)
-        shot_type = "Corner Three"
-        made_chance = 0.38
-    elif zone == "Right Corner 3PT":
-        x = rng.randint(190, 250)
-        y = rng.randint(350, 470)
-        shot_type = "Corner Three"
-        made_chance = 0.38
-    else:
-        x = rng.randint(-180, 180)
-        y = rng.randint(180, 280)
-        shot_type = rng.choice(["Spot-up Three", "Pull-up Three"])
-        made_chance = 0.36
-
-    distance_cm = int(math.hypot(x, y))
-    made = 1 if rng.random() < made_chance else 0
-    return (
-        game_id,
-        player_id,
-        team_id,
-        rng.randint(1, 4),
-        rng.randint(0, 720),
-        x,
-        y,
-        distance_cm,
-        shot_type,
-        zone,
-        made,
-    )
-
-
 def build_scoring_shot_location(rng, points):
-    if points == 3:
-        zone_weights = [
-            ("Left Corner 3PT", 0.18),
-            ("Right Corner 3PT", 0.18),
-            ("Above The Break 3PT", 0.64),
-        ]
-    else:
-        zone_weights = [
-            ("Restricted Area", 0.38),
-            ("In The Paint (Non-RA)", 0.34),
-            ("Mid-Range", 0.28),
-        ]
-    zones = [zone for zone, _ in zone_weights]
-    weights = [weight for _, weight in zone_weights]
-    zone = rng.choices(zones, weights=weights, k=1)[0]
+    from scorekeeper import _classify_shot_zone
 
-    if zone == "Restricted Area":
-        x = rng.randint(-55, 55)
-        y = rng.randint(0, 120)
-        shot_type = rng.choice(["Dunk", "Layup"])
-    elif zone == "In The Paint (Non-RA)":
-        x = rng.randint(-100, 100)
-        y = rng.randint(130, 280)
-        shot_type = rng.choice(["Layup", "Floater"])
-    elif zone == "Mid-Range":
-        x = rng.randint(-220, 220)
-        y = rng.randint(280, 390)
-        shot_type = rng.choice(["Pull-up", "Floater", "Post-Up"])
-    elif zone == "Left Corner 3PT":
-        x = rng.randint(-250, -190)
-        y = rng.randint(350, 470)
-        shot_type = "Corner Three"
-    elif zone == "Right Corner 3PT":
-        x = rng.randint(190, 250)
-        y = rng.randint(350, 470)
-        shot_type = "Corner Three"
-    else:
-        x = rng.randint(-180, 180)
-        y = rng.randint(180, 280)
-        shot_type = rng.choice(["Spot-up Three", "Pull-up Three"])
-
-    return x, y, int(math.hypot(x, y)), shot_type, zone
+    locations = {
+        "Restricted Area": (-30, 30, 375, 418, "Layup"),
+        "In The Paint (Non-RA)": (-65, 65, 255, 320, "Floater"),
+        "Mid-Range": (-175, 175, 225, 335, "Pull-up"),
+        "Left Corner 3PT": (-246, -224, 310, 421, "Corner Three"),
+        "Right Corner 3PT": (224, 246, 310, 421, "Corner Three"),
+        "Above The Break 3PT": (-202, 202, 40, 142, "Spot-up Three"),
+    }
+    zones, weights = (
+        (["Left Corner 3PT", "Right Corner 3PT", "Above The Break 3PT"], [18, 18, 64])
+        if points == 3 else (["Restricted Area", "In The Paint (Non-RA)", "Mid-Range"], [38, 34, 28])
+    )
+    zone = rng.choices(zones, weights=weights)[0]
+    lo_x, hi_x, lo_y, hi_y, shot_type = locations[zone]
+    while True:
+        x, y = rng.randint(lo_x, hi_x), rng.randint(lo_y, hi_y)
+        if _classify_shot_zone(x, y) == zone:
+            return x, y, int(math.hypot(x, y - 390)), shot_type, zone
 
 
 def score_events_for_team(rng, target_score):
@@ -363,13 +247,103 @@ def score_events_for_team(rng, target_score):
     return events
 
 
-def missed_shot_events_for_team(rng, team_id, team_players, count):
-    events = []
-    for _ in range(count):
-        player_id = rng.choice(team_players[team_id])[0]
-        shot_points = rng.choice([2, 2, 2, 3])
-        events.append((team_id, player_id, None, -shot_points))
-    return events
+def simulate_game(rng, game_id, home_team, away_team, home_target, away_target, rosters, names):
+    from collections import Counter
+
+    teams = (home_team, away_team)
+    counters = {player_id: Counter() for team_id in teams for player_id in rosters[team_id]}
+    scores = dict.fromkeys(teams, 0)
+    shots, events = [], []
+    stream = []
+    for team_id, target in zip(teams, (home_target, away_target)):
+        stream.extend((team_id, points) for points in score_events_for_team(rng, target))
+        stream.extend((team_id, -rng.choice((2, 2, 2, 3))) for _ in range(rng.randint(32, 48)))
+        for category, count in (("Turnover", 12), ("Steal", 7), ("Block", 4), ("Foul", 15), ("Free Throw Missed", 5)):
+            stream.extend((team_id, category) for _ in range(count))
+    rng.shuffle(stream)
+
+    def append_event(team_id, actor, category, assist=None):
+        description = f"{names[actor]} {category}"
+        if assist:
+            description += f" (assist: {names[assist]})"
+        events.append((game_id, period, seconds_left, team_id, actor, assist, category,
+                       description, scores[home_team], scores[away_team]))
+
+    for index, (team_id, action) in enumerate(stream):
+        elapsed = index * 2880 // len(stream)
+        period, seconds_left = elapsed // 720 + 1, 720 - elapsed % 720
+        starters_play = seconds_left > 300
+        on_court = {
+            team: rosters[team][:5] if starters_play else rosters[team][5:]
+            for team in teams
+        }
+        other = away_team if team_id == home_team else home_team
+        actor = rng.choices(on_court[team_id], weights=(23, 24, 20, 17, 16))[0]
+        record = counters[actor]
+        if isinstance(action, str):
+            key = {"Turnover": "turnovers", "Steal": "steals", "Block": "blocks",
+                   "Foul": "fouls", "Free Throw Missed": "fta"}[action]
+            record[key] += 1
+            append_event(team_id, actor, action)
+            continue
+
+        points = abs(action)
+        made = action > 0
+        assist = None
+        if made:
+            scores[team_id] += points
+            record["points"] += points
+            for team, side in ((team_id, points), (other, -points)):
+                for active in on_court[team]:
+                    counters[active]["plus_minus"] += side
+        if points == 1:
+            record["fta"] += 1
+            record["ftm"] += int(made)
+            category = "Free Throw Made" if made else "Free Throw Missed"
+        else:
+            record["fga"] += 1
+            record["fgm"] += int(made)
+            if points == 3 and made:
+                record["threes"] += 1
+            if made and rng.random() < 0.58:
+                assist = rng.choice([player for player in on_court[team_id] if player != actor])
+                counters[assist]["assists"] += 1
+            label = "Two-Point" if points == 2 else "Three-Point"
+            category = f"{label} {'Made' if made else 'Missed'}"
+            x, y, distance, shot_type, zone = build_scoring_shot_location(rng, points)
+            shots.append((game_id, actor, team_id, period, seconds_left, x, y, distance, shot_type, zone, int(made)))
+        append_event(team_id, actor, category, assist)
+        if not made:
+            rebound_team = team_id if rng.random() < 0.24 else other
+            rebounder = rng.choices(on_court[rebound_team], weights=(9, 12, 19, 27, 33))[0]
+            counters[rebounder]["rebounds"] += 1
+            append_event(rebound_team, rebounder, "Rebound")
+
+    stats = []
+    for team_id in teams:
+        for index, player_id in enumerate(rosters[team_id]):
+            row = counters[player_id]
+            minutes = 28 if index < 5 else 20
+            stats.append((
+                game_id, player_id, team_id, minutes, row["points"], row["rebounds"],
+                row["assists"], row["steals"], row["blocks"], row["turnovers"], row["fouls"], minutes * 60, 0,
+                row["fgm"], row["fga"], row["threes"], row["ftm"], row["fta"], row["plus_minus"],
+            ))
+    return scores, stats, shots, events
+
+
+def demo_schedule(team_id_list):
+    schedule = []
+    round_robin = team_id_list[:]
+    for round_index in range(GAMES_PER_TEAM):
+        for i in range(len(round_robin) // 2):
+            left = round_robin[i]
+            right = round_robin[-1 - i]
+            home_team_id = left if (round_index + i) % 2 == 0 else right
+            away_team_id = right if home_team_id == left else left
+            schedule.append((home_team_id, away_team_id))
+        round_robin = [round_robin[0], round_robin[-1], *round_robin[1:-1]]
+    return schedule
 
 
 def insert_games_and_tracking(connection, team_ids, player_ids, rng, season, start_date):
@@ -384,184 +358,46 @@ def insert_games_and_tracking(connection, team_ids, player_ids, rng, season, sta
     for index, player_id in enumerate(player_ids):
         team_abbr = TEAMS[index // 10][2]
         team_id = team_ids[team_abbr]
-        team_players[team_id].append((player_id, ROSTER_POSITIONS[index % 10]))
+        team_players[team_id].append(player_id)
 
     stats_rows = []
     shot_rows = []
     pbp_rows = []
 
-    schedule = []
-    round_robin = team_id_list[:]
-    for round_index in range(GAMES_PER_TEAM):
-        for i in range(len(round_robin) // 2):
-            left = round_robin[i]
-            right = round_robin[-1 - i]
-            home_team_id = left if (round_index + i) % 2 == 0 else right
-            away_team_id = right if home_team_id == left else left
-            schedule.append((home_team_id, away_team_id))
-        round_robin = [round_robin[0], round_robin[-1], *round_robin[1:-1]]
+    schedule = demo_schedule(team_id_list)
 
     with connection.cursor() as cursor:
         game_number = 0
         for home_team_id, away_team_id in schedule:
-
-                if game_number < 45:
-                    home_score = rng.randint(98, 128)
-                    away_score = rng.randint(98, 128)
-                    if home_score == away_score:
-                        away_score += 1
-                    status = "finished"
-                else:
-                    home_score = 0
-                    away_score = 0
-                    status = "scheduled"
-
-                cursor.execute(
-                    """
-                    INSERT INTO games
-                        (season, game_date, home_team_id, away_team_id,
-                         home_score, away_score, status, period, seconds_remaining)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 720)
-                    """,
-                    (
-                        season,
-                        start_date + timedelta(days=game_number),
-                        home_team_id,
-                        away_team_id,
-                        home_score,
-                        away_score,
-                        status,
-                    ),
-                )
-                game_id = cursor.lastrowid
-                game_number += 1
-
-                if status == "scheduled":
-                    continue
-
-                for team_id, team_score in (
-                    (home_team_id, home_score),
-                    (away_team_id, away_score),
-                ):
-                    opponent_score = away_score if team_id == home_team_id else home_score
-                    point_diff = team_score - opponent_score
-                    for player_id, position in team_players[team_id]:
-                        stats_rows.append(
-                            build_stat_line(
-                                rng,
-                                game_id,
-                                player_id,
-                                team_id,
-                                position,
-                                team_score,
-                                point_diff,
-                            )
-                        )
-                home_events = score_events_for_team(rng, home_score)
-                away_events = score_events_for_team(rng, away_score)
-                event_stream = []
-                for points in home_events:
-                    player_id = rng.choice(team_players[home_team_id])[0]
-                    assist_player_id = (
-                        rng.choice(team_players[home_team_id])[0]
-                        if points in (2, 3) and rng.random() < 0.55
-                        else None
-                    )
-                    event_stream.append((home_team_id, player_id, assist_player_id, points))
-                for points in away_events:
-                    player_id = rng.choice(team_players[away_team_id])[0]
-                    assist_player_id = (
-                        rng.choice(team_players[away_team_id])[0]
-                        if points in (2, 3) and rng.random() < 0.55
-                        else None
-                    )
-                    event_stream.append((away_team_id, player_id, assist_player_id, points))
-
-                event_stream.extend(
-                    missed_shot_events_for_team(
-                        rng,
-                        home_team_id,
-                        team_players,
-                        rng.randint(32, 48),
-                    )
-                )
-                event_stream.extend(
-                    missed_shot_events_for_team(
-                        rng,
-                        away_team_id,
-                        team_players,
-                        rng.randint(32, 48),
-                    )
-                )
-
-                random.shuffle(event_stream)
-
-                time_slots = []
-                for period in range(1, 5):
-                    for seconds in range(720, 0, -6):
-                        time_slots.append((period, seconds))
-
-                current_home_score = 0
-                current_away_score = 0
-                for event_order, (team_id, player_id, assist_player_id, raw_points) in enumerate(
-                    event_stream
-                ):
-                    is_miss = raw_points < 0
-                    points = abs(raw_points)
-                    period, seconds_remaining = time_slots[event_order]
-                    if raw_points > 0:
-                        if team_id == home_team_id:
-                            current_home_score += points
-                        else:
-                            current_away_score += points
-
-                    if is_miss:
-                        event_type = "Missed Shot"
-                    elif points == 1:
-                        event_type = "Free Throw Made"
-                    elif points == 2:
-                        event_type = "Two-Point Made"
-                    else:
-                        event_type = "Three-Point Made"
-
-                    description = f"{id_to_name[player_id]} {event_type}"
-                    if assist_player_id:
-                        description += f" (assist: {id_to_name[assist_player_id]})"
-
-                    if points in (2, 3):
-                        shot_x, shot_y, shot_distance, shot_type, shot_zone = (
-                            build_scoring_shot_location(rng, points)
-                        )
-                        shot_rows.append(
-                            (
-                                game_id,
-                                player_id,
-                                team_id,
-                                period,
-                                seconds_remaining,
-                                shot_x,
-                                shot_y,
-                                shot_distance,
-                                shot_type,
-                                shot_zone,
-                                0 if is_miss else 1,
-                            )
-                        )
-
-                    pbp_rows.append(
-                        (
-                            game_id,
-                            period,
-                            seconds_remaining,
-                            team_id,
-                            player_id,
-                            assist_player_id,
-                            event_type,
-                            description,
-                            current_home_score,
-                            current_away_score,
-                        )
-                    )
+            finished = game_number < 45
+            cursor.execute(
+                """
+                INSERT INTO games
+                    (season, game_date, home_team_id, away_team_id, home_score, away_score, status, period,
+                     seconds_remaining, starters_initialized)
+                VALUES (%s, %s, %s, %s, 0, 0, %s, %s, %s, %s)
+                """,
+                (season, start_date + timedelta(days=game_number), home_team_id, away_team_id,
+                 "finished" if finished else "scheduled", 4 if finished else 1, 0 if finished else 720, int(finished)),
+            )
+            game_id = cursor.lastrowid
+            game_number += 1
+            if not finished:
+                continue
+            home_target, away_target = rng.randint(98, 128), rng.randint(98, 128)
+            if home_target == away_target:
+                away_target += 1
+            scores, stats, shots, events = simulate_game(
+                rng, game_id, home_team_id, away_team_id, home_target, away_target, team_players, id_to_name
+            )
+            stats_rows.extend(stats)
+            shot_rows.extend(shots)
+            pbp_rows.extend(events)
+            cursor.execute("UPDATE games SET home_score=%s, away_score=%s WHERE id=%s",
+                           (scores[home_team_id], scores[away_team_id], game_id))
+            cursor.executemany("INSERT INTO game_starters (game_id,team_id,player_id) VALUES (%s,%s,%s)",
+                               [(game_id, team, player) for team in (home_team_id, away_team_id)
+                                for player in team_players[team][:5]])
 
         cursor.executemany(
             """
@@ -866,6 +702,20 @@ def insert_free_agency_data(connection, team_ids, player_ids, rng):
     return len(target_ids)
 
 
+def insert_draft_prospects(connection):
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO draft_prospects
+                (draft_year, name, position, source, games, minutes, assists, turnovers, rebounds, threes, observation)
+            VALUES (2026, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            DEMO_ROWS,
+        )
+    connection.commit()
+    return len(DEMO_ROWS)
+
+
 def seed_demo_data(connection):
     rng = random.Random(42)
     team_ids = insert_teams(connection)
@@ -898,6 +748,7 @@ def seed_demo_data(connection):
     tracking_counts["player_health"] = insert_player_health(connection, player_ids, rng)
     tracking_counts["scout_reports"] = insert_scout_reports(connection, player_ids, rng)
     tracking_counts["draft_picks"] = insert_draft_picks(connection, team_ids, rng)
+    tracking_counts["draft_prospects"] = insert_draft_prospects(connection)
     tracking_counts["free_agency_targets"] = insert_free_agency_data(
         connection, team_ids, free_agent_ids, rng
     )
@@ -915,3 +766,60 @@ def seed_demo_data(connection):
         tracking_counts["salary_caps"] = cursor.fetchone()["total"]
 
     return tracking_counts
+
+def validate_demo_games(connection):
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            WITH totals AS (
+                SELECT s.game_id,
+                       SUM(CASE WHEN s.team_id=g.home_team_id THEN s.points ELSE 0 END) AS home,
+                       SUM(CASE WHEN s.team_id=g.away_team_id THEN s.points ELSE 0 END) AS away
+                FROM player_game_stats s JOIN games g ON g.id=s.game_id GROUP BY s.game_id
+            ), final_events AS (
+                SELECT game_id, score_home, score_away,
+                       ROW_NUMBER() OVER (PARTITION BY game_id ORDER BY period DESC, seconds_remaining, id DESC) AS rn
+                FROM play_by_play WHERE voided_at IS NULL
+            )
+            SELECT g.id FROM games g
+                LEFT JOIN totals t ON t.game_id=g.id
+                LEFT JOIN final_events e ON e.game_id=g.id AND e.rn=1
+            WHERE g.status='finished' AND (
+                g.period<4 OR g.seconds_remaining<>0 OR t.game_id IS NULL OR e.game_id IS NULL
+                OR t.home<>g.home_score OR t.away<>g.away_score
+                OR e.score_home<>g.home_score OR e.score_away<>g.away_score
+            ) LIMIT 1
+            """
+        )
+        bad = cursor.fetchone()
+        if bad:
+            raise RuntimeError(f"演示比赛 {bad['id']} 的比分、逐回合或技术统计不一致")
+
+        cursor.execute(
+            """
+            WITH shooting AS (
+                SELECT game_id,player_id,COUNT(*) AS attempts,SUM(made) AS made,
+                       SUM(CASE WHEN zone LIKE '%3PT' THEN made ELSE 0 END) AS threes
+                FROM shot_attempts WHERE voided_at IS NULL GROUP BY game_id,player_id
+            ), scoring AS (
+                SELECT game_id,player_id,
+                       SUM(CASE event_type WHEN 'Free Throw Made' THEN 1
+                           WHEN 'Two-Point Made' THEN 2 WHEN 'Three-Point Made' THEN 3 ELSE 0 END) AS points,
+                       SUM(event_type='Free Throw Made') AS ftm,
+                       SUM(event_type IN ('Free Throw Made', 'Free Throw Missed')) AS fta
+                FROM play_by_play WHERE voided_at IS NULL GROUP BY game_id,player_id
+            )
+            SELECT p.game_id,p.player_id FROM player_game_stats p
+            LEFT JOIN shooting s ON s.game_id=p.game_id AND s.player_id=p.player_id
+            LEFT JOIN scoring e ON e.game_id=p.game_id AND e.player_id=p.player_id
+            WHERE p.points<>COALESCE(e.points,0) OR p.field_goals_attempted<>COALESCE(s.attempts,0)
+               OR p.field_goals_made<>COALESCE(s.made,0) OR p.three_points_made<>COALESCE(s.threes,0)
+               OR p.free_throws_made<>COALESCE(e.ftm,0) OR p.free_throws_attempted<>COALESCE(e.fta,0)
+            LIMIT 1
+            """
+        )
+        bad = cursor.fetchone()
+        if bad:
+            raise RuntimeError(f"演示比赛 {bad['game_id']} 的球员 {bad['player_id']} 存在投篮或得分差异")
+        cursor.execute("SELECT COUNT(*) AS total FROM games WHERE status='finished'")
+        return cursor.fetchone()["total"]

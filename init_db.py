@@ -4,7 +4,7 @@ import pymysql
 
 from db import DB_CONFIG
 from migrate_db import create_database, migrate, schema_statements
-from seed_data import seed_demo_data
+from seed_data import seed_demo_data, validate_demo_games
 
 
 def main():
@@ -21,9 +21,11 @@ def main():
                 cursor.execute(statement)
         counts = seed_demo_data(connection)
         migrate(connection)
+        checked = validate_demo_games(connection)
     print("演示库重建完成")
     for table, count in counts.items():
         print(f"  {table}: {count}")
+    print(f"  已对账完赛: {checked}")
 
 
 if __name__ == "__main__":

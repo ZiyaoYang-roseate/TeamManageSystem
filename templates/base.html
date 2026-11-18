@@ -344,7 +344,7 @@
 
         {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
         <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#rosterNav">
-            <span>管理层</span><i class="bi bi-chevron-down"></i>
+            <span>{{ "球队管理" if current_user.role == ROLE_MANAGEMENT else "基础档案" }}</span><i class="bi bi-chevron-down"></i>
         </button>
         <div id="rosterNav" class="sidebar-accordion show">
             <ul class="nav flex-column">
@@ -359,12 +359,12 @@
                         <i class="bi bi-shield"></i>球队
                     </a>
                 </li>
+                {% if current_user.role == ROLE_MANAGEMENT %}
                 <li>
                     <a class="nav-link {% if request.endpoint == 'salary' %}active{% endif %}" href="{{ url_for('salary') }}">
-                        <i class="bi bi-cash-coin"></i>薪资合同
+                        <i class="bi bi-cash-coin"></i>薪资与阵容规划
                     </a>
                 </li>
-                {% if current_user.role == ROLE_MANAGEMENT %}
                 <li>
                     <a class="nav-link {% if request.endpoint == 'free_agency' %}active{% endif %}" href="{{ url_for('free_agency') }}">
                         <i class="bi bi-bag-plus"></i>自由市场
@@ -384,12 +384,12 @@
                         <i class="bi bi-inbox"></i>交易收发记录
                     </a>
                 </li>
-                {% endif %}
                 <li>
                     <a class="nav-link {% if request.endpoint == 'scouting' %}active{% endif %}" href="{{ url_for('scouting') }}">
-                        <i class="bi bi-search"></i>球探选秀
+                        <i class="bi bi-search"></i>选秀准备
                     </a>
                 </li>
+                {% endif %}
             </ul>
         </div>
         {% endif %}

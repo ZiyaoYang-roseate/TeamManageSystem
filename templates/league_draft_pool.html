@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}选秀候选池 · 联赛运营台{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <h1 class="h3 mb-0">选秀候选池</h1>
+    <a class="btn btn-outline-secondary" href="{{ url_for('league_dashboard') }}">返回联赛运营台</a>
+</div>
+<p class="text-secondary">发布候选资料后，各队可在本队选秀工作区比较和记录。</p>
+<form class="row g-3 mb-4" method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-2"><label class="form-label" for="draftYear">选秀年份</label><input type="number" class="form-control" id="draftYear" name="draft_year" min="2000" max="2100" required></div>
+    <div class="col-md-4"><label class="form-label" for="name">候选人</label><input class="form-control" id="name" name="name" maxlength="80" required></div>
+    <div class="col-md-2"><label class="form-label" for="position">位置</label><select class="form-select" id="position" name="position">{% for position in positions %}<option>{{ position }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label" for="externalLevel">外部比赛类型</label><select class="form-select" id="externalLevel" name="external_level">{% for level in levels %}<option>{{ level }}</option>{% endfor %}</select></div>
+    {% for key, label, limit in [('external_program', '原学校或外部球队', 30), ('external_event', '外部赛事与赛季', 30), ('external_reference', '数据出处或可回查的档案编号', 55)] %}
+    <div class="col-md-4"><label class="form-label" for="{{ key }}">{{ label }}</label><input class="form-control" id="{{ key }}" name="{{ key }}" maxlength="{{ limit }}" required></div>
+    {% endfor %}
+    <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" id="simulated" name="simulated" value="1"><label class="form-check-label" for="simulated">课程模拟数据</label></div>
+    {% for key, label in [('games', '样本场次'), ('minutes', '场均分钟')] %}
+    <div class="col-6 col-md-2"><label class="form-label" for="{{ key }}">{{ label }}</label><input class="form-control" type="number" id="{{ key }}" name="{{ key }}" min="1" max="{{ 999 if key == 'games' else 60 }}" required></div>
+    {% endfor %}
+    {% for key, label in [('assists', '场均助攻'), ('turnovers', '场均失误'), ('rebounds', '场均篮板'), ('threes', '场均三分命中')] %}
+    <div class="col-6 col-md-2"><label class="form-label" for="{{ key }}">{{ label }}</label><input class="form-control" type="number" id="{{ key }}" name="{{ key }}" min="0" max="99" step="0.01" required></div>
+    {% endfor %}
+    {% for key, (label, limit) in profile_fields.items() %}
+    <div class="col-md-6"><label class="form-label" for="{{ key }}">{{ label }}</label><input class="form-control" id="{{ key }}" name="{{ key }}" maxlength="{{ limit }}" required></div>
+    {% endfor %}
+    <div class="col-12"><button class="btn btn-primary">发布候选人</button></div>
+</form>
+<h2 class="h5">已发布候选人</h2>
+<ul class="list-group">
+    {% for item in candidates %}<li class="list-group-item">{{ item.draft_year }} · {{ item.name }} · {{ item.position }} · {{ item.profile.source }}</li>
+    {% else %}<li class="list-group-item text-secondary">暂无候选人。</li>{% endfor %}
+</ul>
+{% endblock %}

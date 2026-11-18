@@ -1,272 +1,182 @@
 {% extends "base.html" %}
-
 {% block title %}投篮热区 - NBA 球队管理系统{% endblock %}
-
 {% block content %}
-{% set total_made = zones | map(attribute='made') | sum %}
-{% set total_attempts = zones | map(attribute='attempts') | sum %}
+{% macro pct(value) %}{{ "%.1f" | format(value) }}%{% endmacro %}
+{% macro zone_link(zone, anchor="shot-details", page_number=1, result=outcome) %}{{ url_for('shot_chart', player_id=selected.id, season=season, scope=scope, mode=mode, zone=zone, outcome=result, shot_page=page_number, _anchor=anchor) }}{% endmacro %}
+<link rel="stylesheet" href="{{ url_for('static', filename='shot-analysis.css') }}">
 
-<div class="page-heading mb-4">
-    <h1 class="h3 mb-1">投篮热区分析</h1>
-    <div class="text-secondary small">半场鸟瞰视角，6 个精准热区覆盖标准 NBA 球场</div>
-</div>
-
-<form class="row g-3 align-items-end mb-4" method="get">
-    <div class="col-md-5">
-        <label for="player_id" class="form-label">选择球员</label>
-        <select class="form-select" id="player_id" name="player_id" onchange="this.form.submit()">
-            {% for player in players %}
-            <option value="{{ player.id }}" {% if selected and player.id == selected.id %}selected{% endif %}>
-                {{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})
-            </option>
-            {% endfor %}
-        </select>
-    </div>
-</form>
-
-<div class="row g-4">
-    <div class="col-lg-7">
-        <div class="card shadow-sm shot-card">
-            <div class="shot-header">
-                <div>
-                    <div class="fw-semibold">{{ selected.name if selected else "未选择球员" }}</div>
-                    {% if selected %}
-                    <div class="text-secondary small">{{ selected.team_name }} ({{ selected.abbreviation }})</div>
-                    {% endif %}
-                </div>
-                <div class="text-end">
-                    <div class="small text-secondary">命中数 / 出手数 · 命中</div>
-                    <div class="fw-semibold">
-                        {{ total_made }}/{{ total_attempts }}
-                        ·
-                        {{ ((total_made / total_attempts) * 100) | round(1) if total_attempts else "0.0" }}%
-                    </div>
-                </div>
-            </div>
-
-            <div class="court-map">
-                <svg viewBox="0 0 500 470" role="img" aria-label="半场投篮热区图">
-                    <rect x="0" y="0" width="500" height="470" class="court-wood"></rect>
-
-                    <line x1="0" y1="0" x2="500" y2="0" class="court-line"></line>
-                    <line x1="0" y1="430" x2="500" y2="430" class="court-line"></line>
-                    <rect x="0" y="0" width="500" height="430" class="court-line"></rect>
-                    <circle cx="250" cy="0" r="56" class="court-line"></circle>
-
-                    <line x1="170" y1="240" x2="330" y2="240" class="court-line"></line>
-                    <rect x="170" y="240" width="160" height="190" class="court-line"></rect>
-                    <path d="M 170,240 A 60,60 0 0,1 330,240" class="court-line court-dashed"></path>
-
-                    <path d="M 30,290 A 237.5,237.5 0 0,1 470,290" class="court-line"></path>
-                    <line x1="30" y1="290" x2="30" y2="430" class="court-line"></line>
-                    <line x1="470" y1="290" x2="470" y2="430" class="court-line"></line>
-                    <circle cx="250" cy="390" r="7.5" class="court-line"></circle>
-                    <line x1="230" y1="390" x2="270" y2="390" class="court-line"></line>
-
-                    {% for zone in zones | reverse %}
-                    <path class="shot-zone"
-                          d="{{ zone.path }}"
-                          fill="{{ zone.color }}" fill-opacity="0.72"
-                          stroke="#ffffff" stroke-opacity="0.45" stroke-width="1"
-                          data-zone="{{ zone.zone }}"
-                          data-made="{{ zone.made }}"
-                          data-attempts="{{ zone.attempts }}"
-                          data-pct="{{ "%.1f"|format(zone.player_pct) }}"
-                          data-diff="{{ "%+.1f"|format(zone.diff) }}">
-                        <title>{{ zone.zone }}：{{ "%.1f"|format(zone.player_pct) }}% {{ zone.made }}/{{ zone.attempts }}</title>
-                    </path>
-                    {% endfor %}
-
-                    {% for zone in zones %}
-                    <text x="{{ zone.text_x }}" y="{{ zone.text_y }}" text-anchor="middle" class="shot-label">
-                        {{ "%.1f"|format(zone.player_pct) }}%
-                    </text>
-                    <text x="{{ zone.text_x }}" y="{{ zone.text_y + zone.text_dy }}" text-anchor="middle" class="shot-data">
-                        {{ zone.made }}/{{ zone.attempts }}
-                    </text>
-                    {% endfor %}
-                </svg>
-                <div class="shot-tooltip" id="shotTooltip"></div>
-            </div>
-
-            <div class="shot-legend">
-                <span><i class="legend-dot" style="background:#FF5722;"></i>高于平均</span>
-                <span><i class="legend-dot" style="background:#FFEB3B;"></i>处于平均</span>
-                <span><i class="legend-dot" style="background:#2196F3;"></i>低于平均</span>
-                <span><i class="legend-dot" style="background:#49545f;"></i>无出手</span>
-            </div>
+<div class="shot-analysis">
+    <header class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-3">
+        <h1 class="h3 mb-0">投篮热区</h1>
+        {% if selected and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+        <a class="small" href="{{ url_for('player_detail', player_id=selected.id, season=season) }}">{{ selected.name }}的球员主页</a>
+        {% endif %}
+    </header>
+    <form class="shot-filters row g-3 align-items-end mb-4" method="get">
+        <input type="hidden" name="mode" value="{{ mode }}">
+        <div class="col-md-5">
+            <label for="playerId" class="form-label">球员</label>
+            <input type="search" hidden class="form-control form-control-sm mb-2" aria-label="搜索球员" placeholder="按姓名或球队搜索" data-options-for="playerId">
+            <select class="form-select" id="playerId" name="player_id" required>
+                <option value="" disabled{% if not selected %} selected{% endif %}>选择球员</option>
+                {% for player in players %}
+                <option value="{{ player.id }}"{% if selected and player.id == selected.id %} selected{% endif %}>{{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})</option>
+                {% endfor %}
+            </select>
+            <div class="small text-secondary" data-option-status="playerId" aria-live="polite"></div>
         </div>
-    </div>
+        <div class="col-sm-4 col-md-2">
+            <label for="shotSeason" class="form-label">赛季</label>
+            <select id="shotSeason" name="season" class="form-select">
+                {% for choice in seasons %}<option value="{{ choice }}"{% if choice == season %} selected{% endif %}>{{ choice }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-sm-5 col-md-3">
+            <label for="shotScope" class="form-label">样本范围</label>
+            <select id="shotScope" name="scope" class="form-select">
+                <option value="season"{% if scope == "season" %} selected{% endif %}>赛季全部完赛</option>
+                <option value="recent"{% if scope == "recent" %} selected{% endif %}>最近 5 场有出手的比赛</option>
+            </select>
+        </div>
+        <div class="col-sm-3 col-md-2"><button class="btn btn-primary w-100" type="submit">查看</button></div>
+    </form>
 
-    <div class="col-lg-5">
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
+    {% if selection_missing %}
+    <p class="alert alert-warning" role="status">没有找到该球员，请重新选择。</p>
+    {% elif not selected %}
+    <p class="text-secondary">暂无球员可以查看。</p>
+    {% else %}
+    <section class="shot-summary mb-4" aria-label="出手样本概况">
+        {% set made = zones | map(attribute='made') | sum %}
+        <div><span class="small text-secondary">出手样本</span><strong>{{ total }} 次</strong></div>
+        <div><span class="small text-secondary">命中</span><strong>{{ made }} 次</strong></div>
+        <div><span class="small text-secondary">样本命中率</span><strong>{{ pct(100 * made / total) if total else "—" }}</strong></div>
+        <div><span class="small text-secondary">统计范围</span><strong class="shot-sample">{{ season }}{% if recent_count is not none %} · 近 {{ recent_count }} 场{% endif %}</strong></div>
+    </section>
+    {% if not total %}
+    <p class="text-secondary">此范围暂无带位置的完赛出手。可以切换赛季或球员查看。</p>
+    {% else %}
+    <div class="shot-layout mb-4">
+        <section class="shot-panel" id="court-panel" aria-labelledby="court-title">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <h2 id="court-title" class="h5 mb-0">半场分区</h2>
+                <div class="btn-group btn-group-sm" role="group" aria-label="热区颜色口径">
+                    {% for key, text in [('volume','出手分布'), ('efficiency','相对联盟效率')] %}
+                    <a class="btn {{ 'btn-primary' if mode == key else 'btn-outline-primary' }}" href="{{ url_for('shot_chart', player_id=selected.id, season=season, scope=scope, mode=key, zone=focus.zone, outcome=outcome, _anchor='court-panel') }}"{% if mode == key %} aria-current="true"{% endif %}>{{ text }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            <p class="small text-secondary mb-3">{% if mode == "volume" %}颜色越深，区域出手占比越高。{% else %}以同赛季联盟各区命中率为基准，双方各至少 10 次出手才标注差值。{% endif %}点分区查看记录。</p>
+            <svg class="shot-court" viewBox="0 0 500 430" role="group" aria-label="可点击的半场投篮分区">
+                {% for zone in zones|reverse %}
+                    {% set band = zone.volume_band if mode == "volume" else zone.efficiency_band %}
+                    <a href="{{ zone_link(zone.zone) }}" aria-label="{{ zone.label }}，{{ zone.attempts }} 次出手"{% if focus.zone == zone.zone %} aria-current="true"{% endif %}>
+                        <path class="zone-fill tone-{{ band }}" d="{{ zone.path }}"><title>{{ zone.label }} · {{ zone.made }}/{{ zone.attempts }}</title></path>
+                    </a>
+                {% endfor %}
+                <g class="shot-court-lines" aria-hidden="true">
+                    <rect x="1.5" y="1.5" width="497" height="427"></rect>
+                    <path d="M 194,0 A 56,56 0 0,0 306,0 M 170,240 H 330 V 430 M 170,240 V 430"></path>
+                    <path d="M 170,240 A 80,62 0 0,1 330,240 M 30,430 V 290 A 237.5,237.5 0 0,1 470,290 V 430"></path>
+                    <path d="M 210,390 A 40,40 0 0,1 290,390 M 230,390 H 270"></path>
+                    <circle cx="250" cy="390" r="7.5"></circle>
+                </g>
+                <g class="shot-court-labels" aria-hidden="true" text-anchor="middle">
+                    {% for zone in zones %}
+                    <text x="{{ zone.text_x }}" y="{{ zone.text_y }}">
+                        {% if mode == "volume" %}{{ pct(zone.share) if zone.attempts else "—" }}
+                        {% elif zone.qualified %}{{ "%+.1f"|format(zone.diff) }}
+                        {% elif zone.attempts %}不足{% else %}—{% endif %}
+                    </text>
+                    {% endfor %}
+                </g>
+            </svg>
+            <ul class="shot-legend small list-unstyled mb-0" aria-label="图例">
+                {% if mode == "volume" %}
+                {% set labels = [('low', '低于 10%'), ('medium', '10% 至不足 25%'), ('high', '至少 25%')] %}
+                {% else %}
+                {% set labels = [('higher', '高至少 5 个百分点'), ('near', '相差不足 5 个百分点'), ('lower', '低至少 5 个百分点'), ('limited','样本不足')] %}
+                {% endif %}
+                {% for key, label in labels + [('empty','无出手')] %}<li><span class="shot-swatch tone-{{ key }}" aria-hidden="true"></span>{{ label }}</li>{% endfor %}
+            </ul>
+        </section>
+
+        <section class="shot-panel" aria-labelledby="zones-title">
+            <h2 id="zones-title" class="h5 mb-2">分区数据</h2>
+            <p class="small text-secondary">联盟基准使用同赛季所有完赛记录。切换到最近比赛时，联盟基准保持一致。</p>
+            <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>区域</th>
-                            <th>出手</th>
-                            <th>命中</th>
-                            <th>命中率</th>
-                            <th>联盟平均</th>
-                            <th>差值</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th scope="col">区域</th><th scope="col">命中/出手</th><th scope="col">球员</th><th scope="col">联盟</th><th scope="col">差值</th></tr></thead>
                     <tbody>
-                        {% for zone in zones %}
-                        <tr>
-                            <td>{{ zone.zone }}</td>
-                            <td>{{ zone.attempts }}</td>
-                            <td>{{ zone.made }}</td>
-                            <td>{{ "%.1f"|format(zone.player_pct) }}%</td>
-                            <td>{{ "%.1f"|format(zone.league_pct) }}%</td>
-                            <td class="{{ 'text-warning' if zone.diff > 0 else 'text-primary' }}">{{ "%+.1f"|format(zone.diff) }}%</td>
-                        </tr>
-                        {% endfor %}
+                    {% for zone in zones %}
+                    <tr{% if focus.zone == zone.zone %} class="table-active"{% endif %}>
+                        <th scope="row"><a href="{{ zone_link(zone.zone) }}"{% if focus.zone == zone.zone %} aria-current="true"{% endif %}>{{ zone.label }}</a></th>
+                        <td>{{ zone.made }}/{{ zone.attempts }}</td>
+                        <td>{{ pct(zone.player_pct) if zone.attempts else "—" }}</td>
+                        <td>{{ pct(zone.league_pct) if zone.league_attempts else "—" }}</td>
+                        <td class="text-nowrap small">
+                            {% if zone.qualified %}{{ "%+.1f"|format(zone.diff) }} 个百分点
+                            {% elif zone.attempts %}<span class="text-secondary">样本不足</span>
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
                     </tbody>
                 </table>
             </div>
-        </div>
+        </section>
     </div>
+
+    <section class="shot-panel mb-4" id="shot-details" aria-labelledby="details-title">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div>
+                <h2 id="details-title" class="h5 mb-1">{{ focus.label }} · 出手明细</h2>
+                <p class="small text-secondary mb-0">分区共 {{ focus.attempts }} 次出手{% if outcome != "all" %} · 当前筛选 {{ detail_count }} 次{% endif %}</p>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="出手结果筛选">
+                {% for key, label in [('all','全部'), ('made','命中'), ('missed','未中')] %}
+                <a class="btn {{ 'btn-secondary' if outcome == key else 'btn-outline-secondary' }}" href="{{ zone_link(focus.zone, result=key) }}"{% if outcome == key %} aria-current="true"{% endif %}>{{ label }}</a>
+                {% endfor %}
+            </div>
+            <a class="small" href="#court-panel">返回球场</a>
+        </div>
+        {% if shots %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th scope="col">比赛</th><th scope="col">出手时间</th><th scope="col">结果</th><th scope="col">比赛记录</th></tr></thead>
+                <tbody>
+                    {% for shot in shots %}
+                    <tr>
+                        <th scope="row">{{ shot.team_name }} 对 {{ shot.opponent_name }} <span class="small text-secondary fw-normal">{{ shot.game_date }}</span></th>
+                        <td>{% if shot.period <= 4 %}第 {{ shot.period }} 节{% else %}加时 {{ shot.period - 4 }}{% endif %} · 剩余 {{ "%d:%02d"|format(shot.seconds_remaining // 60, shot.seconds_remaining % 60) }}</td>
+                        <td>{{ "命中" if shot.made else "未中" }}</td>
+                        <td>
+                            {% if current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+                            {% set event_id = shot.event_id or shot.clock_event_id %}
+                            <a href="{{ url_for('play_by_play', game_id=shot.game_id, _anchor=('event-' ~ event_id) if event_id else none) }}">{{ "定位回合" if shot.event_id else "定位同一时刻" if event_id else "查看逐回合" }}</a>
+                            {% else %}
+                            <a href="{{ url_for('scorekeeper_game', game_id=shot.game_id) }}">查看比赛</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% set pages = ((detail_count + detail_page_size - 1) // detail_page_size) %}
+        {% if pages > 1 %}
+        <nav class="d-flex flex-wrap align-items-center gap-3 small" aria-label="出手记录分页">
+            {% if page > 1 %}<a href="{{ zone_link(focus.zone, page_number=page - 1) }}">上一页</a>{% endif %}
+            <span>第 {{ page }} / {{ pages }} 页</span>
+            {% if page < pages %}<a href="{{ zone_link(focus.zone, page_number=page + 1) }}">下一页</a>{% endif %}
+        </nav>
+        {% endif %}
+        {% else %}
+        <p class="text-secondary mb-0 mt-3">当前分区和结果筛选下暂无出手。</p>
+        {% endif %}
+    </section>
+    {% endif %}
+    {% endif %}
 </div>
-
-<style>
-    .shot-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 18px;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--card-border);
-        background: rgba(255, 255, 255, 0.04);
-    }
-
-    .court-map {
-        position: relative;
-        padding: 16px;
-    }
-
-    .court-map svg {
-        width: 100%;
-        height: auto;
-        display: block;
-        border-radius: 8px;
-        background-color: #c58b4a;
-        background-image:
-            repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 46px),
-            repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 1px, transparent 1px 128px),
-            linear-gradient(120deg, #d5a25d, #a86e32);
-    }
-
-    .court-wood {
-        fill: transparent;
-    }
-
-    .court-line {
-        fill: none;
-        stroke: #5a3a1d;
-        stroke-width: 2;
-        vector-effect: non-scaling-stroke;
-    }
-
-    .court-dashed {
-        stroke-dasharray: 4;
-    }
-
-    .shot-zone:hover {
-        fill-opacity: 0.9;
-        stroke: #ffffff;
-        stroke-width: 3px;
-        cursor: pointer;
-    }
-
-    .shot-tooltip {
-        position: absolute;
-        z-index: 20;
-        display: none;
-        pointer-events: none;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background: rgba(10, 14, 18, 0.92);
-        border: 1px solid #33404d;
-        color: #fff;
-        font-size: 13px;
-        min-width: 190px;
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-    }
-
-    .shot-tooltip .tooltip-title {
-        font-weight: 700;
-        margin-bottom: 5px;
-    }
-
-    .shot-tooltip .tooltip-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-    }
-
-    .shot-label,
-    .shot-data {
-        fill: #fff;
-        font-weight: 700;
-        paint-order: stroke;
-        stroke: rgba(0, 0, 0, 0.42);
-        stroke-width: 2px;
-    }
-
-    .shot-label {
-        font-size: 10px;
-    }
-
-    .shot-data {
-        font-size: 9px;
-        font-weight: 600;
-    }
-
-    .shot-legend {
-        display: flex;
-        justify-content: center;
-        gap: 22px;
-        padding: 14px;
-        border-top: 1px solid var(--card-border);
-        color: var(--muted);
-        font-size: 13px;
-    }
-
-    .legend-dot {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        margin-right: 6px;
-    }
-</style>
-
-<script>
-    const shotTooltip = document.getElementById("shotTooltip");
-    const courtMap = document.querySelector(".court-map");
-
-    document.querySelectorAll(".shot-zone").forEach((zone) => {
-        zone.addEventListener("mouseenter", (event) => {
-            shotTooltip.innerHTML = `
-                <div class="tooltip-title">${zone.dataset.zone}</div>
-                <div class="tooltip-row"><span>命中率</span><strong>${zone.dataset.pct}%</strong></div>
-                <div class="tooltip-row"><span>命中/出手</span><strong>${zone.dataset.made}/${zone.dataset.attempts}</strong></div>
-                <div class="tooltip-row"><span>对比联盟</span><strong>${zone.dataset.diff}%</strong></div>
-            `;
-            shotTooltip.style.display = "block";
-        });
-
-        zone.addEventListener("mousemove", (event) => {
-            const rect = courtMap.getBoundingClientRect();
-            shotTooltip.style.left = Math.min(event.clientX - rect.left + 12, rect.width - 210) + "px";
-            shotTooltip.style.top = Math.max(event.clientY - rect.top - 12, 0) + "px";
-        });
-
-        zone.addEventListener("mouseleave", () => {
-            shotTooltip.style.display = "none";
-        });
-    });
-</script>
+<script src="{{ url_for('static', filename='player-compare.js') }}" defer></script>
 {% endblock %}

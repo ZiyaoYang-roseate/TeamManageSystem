@@ -122,6 +122,24 @@
                             {{ player_badges(proposal.receiver_players, 'success') }}
                         </div>
                     </div>
+                    {% if proposal.followup %}
+                    <div class="border-top mt-3 pt-3">
+                        <strong>组合方案的自由市场签约</strong>
+                        <div class="small">{{ proposal.followup.name }} · 1 年 · ${{ "{:,}".format(proposal.followup.salary) }}</div>
+                        {% if proposal.followup.signed %}
+                        <p class="text-success small mb-0">签约已完成。</p>
+                        {% elif proposal.status == 'accepted' %}
+                        <form method="post" action="{{ url_for('complete_roster_package', proposal_id=proposal.id) }}" onsubmit="return confirm('确认按上面的合同签约？系统会重新检查可用球员和薪资空间。');">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-success btn-sm mt-2">复核并确认签约</button>
+                        </form>
+                        {% elif proposal.status == 'pending' %}
+                        <div class="text-secondary small">等待对方接受交易后开放签约确认。</div>
+                        {% else %}
+                        <div class="text-secondary small">交易未成交，组合签约已取消。</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% if proposal.status == 'pending' %}
                     <div class="d-flex justify-content-end mt-3 pt-3 border-top">
                         <form method="post" action="{{ url_for('cancel_trade_proposal', proposal_id=proposal.id) }}"

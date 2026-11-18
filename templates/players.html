@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}球员管理 - NBA 球队管理系统{% endblock %}
+{% block title %}球员档案 - NBA 球队管理系统{% endblock %}
 
 {% block content %}
 <div id="serverSearchScope" data-search-scope="all-players" hidden></div>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
-        <h1 class="h3 mb-1">球员管理</h1>
-        <div class="text-secondary small">查看并维护所有球员信息</div>
+        <h1 class="h3 mb-1">球员档案</h1>
+        <div class="text-secondary small">点击姓名查看个人表现与比赛记录</div>
     </div>
     {% if current_user.role == ROLE_LEAGUE_ADMIN %}
     <a href="{{ url_for('add_player') }}" class="btn btn-primary">
@@ -51,7 +51,7 @@
                 {% for player in players %}
                 <tr>
                     <td>{{ player.jersey_number }}</td>
-                    <td class="text-nowrap fw-semibold">{{ player.name }}</td>
+                    <td class="text-nowrap fw-semibold"><a href="{{ url_for('player_detail', player_id=player.id, season=season, q=search or none, page=page, per_page=per_page) }}">{{ player.name }}</a>{% if player.archived_at %} <span class="badge text-bg-secondary">已归档</span>{% endif %}</td>
                     <td>
                         <span class="text-nowrap">{{ player.team_name }}</span>
                         <span class="text-secondary">({{ player.abbreviation }})</span>
@@ -63,17 +63,17 @@
                     <td>{{ player.nationality }}</td>
                     <td>${{ "{:,}".format(player.salary) }}</td>
                     <td class="text-end text-nowrap">
-                        {% if can_edit_team(player.team_id) %}
+                        {% if not player.archived_at and can_edit_team(player.team_id) %}
                         <a href="{{ url_for('edit_player', player_id=player.id) }}" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-pencil me-1"></i>编辑
                         </a>
                         {% endif %}
-                        {% if current_user.role == ROLE_LEAGUE_ADMIN %}
+                        {% if current_user.role == ROLE_LEAGUE_ADMIN and not player.archived_at %}
                         <form action="{{ url_for('delete_player', player_id=player.id) }}" method="post" class="d-inline"
-                              onsubmit="return confirm('确定删除该球员档案及关联记录吗？');">
+                              onsubmit="return confirm('归档后球员将退出操作名单，历史统计和合同将保留。确认归档？');">
                             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-sm btn-outline-danger">
-                                <i class="bi bi-trash me-1"></i>删除
+                                <i class="bi bi-archive me-1"></i>归档
                             </button>
                         </form>
                         {% endif %}
