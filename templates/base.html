@@ -308,7 +308,7 @@
             {% if current_user and current_user.role == ROLE_LEAGUE_ADMIN %}
             <li>
                 <a class="nav-link {% if request.endpoint == 'league_dashboard' %}active{% endif %}" href="{{ url_for('league_dashboard') }}">
-                    <i class="bi bi-clipboard-data"></i>联赛运营台
+                    <i class="bi bi-clipboard-data"></i>联赛比赛管理
                 </a>
             </li>
             {% endif %}
@@ -334,11 +334,13 @@
                         <i class="bi bi-bullseye"></i>投篮热区
                     </a>
                 </li>
+                {% if current_user.role != ROLE_SCOREKEEPER %}
                 <li>
                     <a class="nav-link {% if request.endpoint == 'compare_players' %}active{% endif %}" href="{{ url_for('compare_players') }}">
                         <i class="bi bi-arrow-left-right"></i>球员对比
                     </a>
                 </li>
+                {% endif %}
             </ul>
         </div>
 
@@ -348,11 +350,7 @@
         </button>
         <div id="rosterNav" class="sidebar-accordion show">
             <ul class="nav flex-column">
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'players' %}active{% endif %}" href="{{ url_for('players') }}">
-                        <i class="bi bi-person-badge"></i>球员档案
-                    </a>
-                </li>
+
                 <li>
                     {% set team_destination = 'my_team' if current_user.role == ROLE_MANAGEMENT else 'teams' %}
                     <a class="nav-link {% if request.endpoint == team_destination %}active{% endif %}" href="{{ url_for(team_destination) }}">

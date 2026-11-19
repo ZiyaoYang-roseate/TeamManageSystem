@@ -42,6 +42,7 @@
                     <button class="btn btn-outline-primary">应用并发送交易</button>
                 </form>
             </div>
+            {% include "roster_rating.html" %}
             <ul class="small mt-3">
                 <li><strong>比赛用法</strong> {{ plan.value.summary }}。{{ plan.value.usage }}</li>
                 <li><strong>数据与取舍</strong> {{ plan.value.court }} {{ plan.value.tradeoff }}</li>

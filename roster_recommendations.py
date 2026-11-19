@@ -4,7 +4,9 @@ from analysis_model import configured_model, generate_content
 from basketball_fit import METRICS, display_profile, per_36, player_profiles, reliable, team_priorities
 from db import transaction
 from roster import max_contract_salary, season_salary_sql, team_payroll
-from trade import decode_proposal_side, salary_matching_max, validate_trade
+from roster_rating import rate_roster_change
+from trade_packages import ranked_packages, package_plan
+from trade import decode_proposal_side, validate_trade
 
 
 PLAN_LIMIT = 3
@@ -65,7 +67,8 @@ def _recommend(kind, candidates, games, priorities, empty_message):
         return {"source": "rules", "plans": [], "team_sample": games,
                 "needs": _team_needs(priorities), "message": empty_message}
     options = [
-        {"id": f"option{index}", "fact": plan["model_fact"],
+        {"id": f"option{index}", "fact": plan["model_fact"] + (
+             f"本队综合评级 {plan['rating']['grade']}，{plan['rating']['summary']}" if plan.get("rating") else ""),
          "actions": list(plan.get("court_options") or ["roster_depth"])}
         for index, plan in enumerate(candidates)
     ]
@@ -90,7 +93,7 @@ def _recommend(kind, candidates, games, priorities, empty_message):
         distinct = []
         used = set()
         for index in ordered:
-            outgoing = tuple(candidates[index]["payload"]["team1_outgoing_player_ids"])
+            outgoing = (len(candidates[index]["payload"]["team1_outgoing_player_ids"]), len(candidates[index]["payload"].get("team2_outgoing_player_ids", [None])))
             if outgoing not in used:
                 distinct.append(index)
                 used.add(outgoing)
@@ -156,88 +159,47 @@ def trade_candidates(team_id, season, limit=SHORTLIST_LIMIT, reserve_salary=0):
         for row in cursor.fetchall():
             sent, _ = decode_proposal_side(row["proposer_outgoing"])
             received, _ = decode_proposal_side(row["receiver_outgoing"])
-            if len(sent) == len(received) == 1:
-                pending.add((row["receiver_team_id"], sent[0], received[0]))
+            pending.add((row["receiver_team_id"], tuple(sorted(sent)), tuple(sorted(received))))
         rosters = defaultdict(list)
         for player in players:
             rosters[player["team_id"]].append(player)
-        ranked = _trade_pairs(team_id, rosters, payroll, cap_amount, priorities, pending)
-        depth = Counter(player["position"] for player in rosters[team_id])
+        ranked = ranked_packages(team_id, rosters, payroll, cap_amount, priorities, pending, bool(reserve_salary))
         own_payroll = payroll.get(team_id, 0)
         candidates = []
-        used_incoming = set()
-        used_outgoing = set()
-        for prefer_distinct in (True, False):
-            for _, outgoing, incoming, metric in ranked:
-                if incoming["id"] in used_incoming or (prefer_distinct and outgoing["id"] in used_outgoing):
-                    continue
-                payload = {
-                    "team1_id": team_id, "team2_id": incoming["team_id"], "season": season,
-                    "team1_outgoing_player_ids": [outgoing["id"]], "team2_outgoing_player_ids": [incoming["id"]],
-                }
-                validation = validate_trade(payload, cursor)
-                if not validation["is_valid"]:
-                    continue
-                salary = validation["team1_summary"]
-                if reserve_salary and own_payroll + salary["incoming"] - salary["outgoing"] + reserve_salary > cap["luxury_tax_line"]:
-                    continue
-                used_incoming.add(incoming["id"])
-                used_outgoing.add(outgoing["id"])
-                candidates.append(_trade_plan(
-                    payload, outgoing, incoming, metric, salary,
-                    depth, priorities, own_payroll, int(cap["luxury_tax_line"]),
-                ))
-                if len(candidates) == limit:
-                    break
-            if len(candidates) == limit:
+        used = set()
+        for _, outgoing, incoming, metric in ranked:
+            rival = incoming["players"][0]["team_id"]
+            key = (rival, outgoing["ids"], incoming["ids"])
+            if key in used:
+                continue
+            payload = {
+                "team1_id": team_id, "team2_id": rival, "season": season,
+                "team1_outgoing_player_ids": list(outgoing["ids"]),
+                "team2_outgoing_player_ids": list(incoming["ids"]),
+            }
+            validation = validate_trade(payload, cursor)
+            if not validation["is_valid"]:
+                continue
+            salary = validation["team1_summary"]
+            if reserve_salary and own_payroll + salary["incoming"] - salary["outgoing"] + reserve_salary > cap["luxury_tax_line"]:
+                continue
+            used.add(key)
+            if len(outgoing["players"]) == len(incoming["players"]) == 1:
+                candidates.append(_trade_plan(payload, outgoing["players"][0], incoming["players"][0], metric,
+                    salary, Counter(p["position"] for p in rosters[team_id]), priorities,
+                    own_payroll, int(cap["luxury_tax_line"])))
+            else:
+                candidates.append(package_plan(payload, outgoing, incoming, metric, salary,
+                    rosters[team_id], rosters[rival], priorities, own_payroll, int(cap["luxury_tax_line"])))
+            candidates[-1]["rating"] = rate_roster_change(
+                rosters[team_id], list(incoming["players"]), list(outgoing["players"]), priorities, games,
+                salary_change=salary["incoming"]-salary["outgoing"],
+                projected_payroll=own_payroll+salary["incoming"]-salary["outgoing"],
+                cap_amount=cap_amount,tax_line=int(cap["luxury_tax_line"]),
+            )
+            if len(candidates) >= limit:
                 break
-    return candidates, games, priorities, "当前没有同时满足薪资配平、阵容覆盖和数据筛选条件的一换一方案。"
-
-
-def _trade_pairs(team_id, rosters, payroll, cap, priorities, pending):
-    own = rosters[team_id]
-    if len(own) > 15:
-        return []
-    own_depth = Counter(player["position"] for player in own)
-    rates = {player["id"]: _rates(player) for roster in rosters.values() for player in roster}
-    metrics = [row["metric"] for row in priorities] or ["rebounds", "assists", "threes", "turnovers", "points"]
-    own_space = cap - payroll.get(team_id, 0)
-    ranked = []
-    for rival, roster in rosters.items():
-        if rival == team_id or len(roster) > 15:
-            continue
-        rival_space = cap - payroll.get(rival, 0)
-        rival_depth = Counter(player["position"] for player in roster)
-        for outgoing in own:
-            outgoing_limit = salary_matching_max(int(outgoing["salary"]), own_space < 0, own_space)
-            for incoming in roster:
-                if (rival, outgoing["id"], incoming["id"]) in pending:
-                    continue
-                incoming_limit = salary_matching_max(int(incoming["salary"]), rival_space < 0, rival_space)
-                if incoming["salary"] > outgoing_limit or outgoing["salary"] > incoming_limit:
-                    continue
-                same_position = outgoing["position"] == incoming["position"]
-                if not same_position and (own_depth[outgoing["position"]] <= 1 or rival_depth[incoming["position"]] <= 1):
-                    continue
-                fills_depth = not same_position and own_depth[incoming["position"]] < 2
-                incoming_rates, outgoing_rates = rates[incoming["id"]], rates[outgoing["id"]]
-                salary_change = int(incoming["salary"] - outgoing["salary"])
-                if not incoming_rates or not outgoing_rates:
-                    if fills_depth and salary_change <= 0:
-                        ranked.append((0.0, outgoing, incoming, None))
-                    continue
-                deltas = {
-                    metric: (incoming_rates[metric] - outgoing_rates[metric]) * (-1 if metric == "turnovers" else 1)
-                    for metric in metrics
-                }
-                metric = max(metrics, key=lambda key: deltas[key] / METRIC_SCALE[key])
-                performance = sum(deltas[key] / METRIC_SCALE[key] / (1 + 0.35 * i) for i, key in enumerate(metrics))
-                salary_cost = salary_change / 15_000_000
-                scoring_loss = max(0, outgoing_rates["points"] - incoming_rates["points"]) / 12
-                score = performance + 0.5 * fills_depth - 0.35 * scoring_loss - salary_cost
-                if score > 0 and deltas[metric] >= 0.1:
-                    ranked.append((score, outgoing, incoming, metric))
-    return sorted(ranked, key=lambda row: (-row[0], row[2]["id"], row[1]["id"]))
+    return candidates, games, priorities, "当前没有同时满足薪资配平、双方位置覆盖和数据适配条件的交易方案。"
 
 
 def _cap_position(amount):
@@ -359,11 +321,11 @@ def signing_recommendations(team_id, season):
         if len(own) >= 15:
             return _recommend("signing_options", [], games, priorities, "本队阵容已满 15 人，腾出名额后可生成签约方案。")
         profiles = player_profiles(cursor, players, season)
-        candidates = _signing_options(profiles, team_id, season, cap, remaining, priorities)
+        candidates = _signing_options(profiles, team_id, season, cap, remaining, priorities, games)
     return _recommend("signing_options", candidates, games, priorities, "当前没有满足薪资约束的可签自由球员。")
 
 
-def _signing_options(profiles, team_id, season, cap, remaining, priorities):
+def _signing_options(profiles, team_id, season, cap, remaining, priorities, games=0):
     roster = [player for player in profiles if player["team_id"] == team_id]
     depth = Counter(player["position"] for player in roster)
     metric = priorities[0]["metric"] if priorities else None
@@ -398,6 +360,11 @@ def _signing_options(profiles, team_id, season, cap, remaining, priorities):
             "notes": notes,
             "payload": {"player_id": player["id"], "salary": salary, "years": 1, "season": season},
             "profiles": [display_profile(player, "候选")],
+            "rating": rate_roster_change(
+                roster, [player], [], priorities, games,
+                salary_change=salary,projected_payroll=int(cap["luxury_tax_line"])-int(remaining)+salary,
+                cap_amount=int(cap["cap_amount"]),tax_line=int(cap["luxury_tax_line"]),
+            ),
             "model_fact": f"位置现有 {depth[position]} 人；"
                           + ("有足量技术样本；" if rates else "缺少足量比赛样本，需先考察；")
                           + (f"优先指标优势 {fit:+.1f}（相对于同位置）。" if rates and metric and comparison else "以占用少量预算的试拟合同补充阵容。"),

@@ -45,6 +45,23 @@
     {% else %}<p class="text-secondary">从候选池加入首选和备选，设置优先顺序与预期角色。</p>{% endif %}
 </section>
 
+<section class="card card-body mb-4" id="draft-assistant">
+    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center"><div><h2 class="h5">选秀智能辅助</h2><p class="small text-secondary mb-0">无需勾选：结合本队短板、到期合同和外部赛事档案，推荐三名优先考察对象。</p></div>
+    <form method="post" action="{{ url_for('scouting',season=season) }}#draft-assistant"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="year" value="{{ workspace.year }}"><button class="btn btn-primary" name="action" value="recommend">AI 推荐候选人</button></form></div>
+    {% if recommendations %}
+    <p class="small text-secondary mt-3">{{ 'AI 整理' if recommendations.source=='model' else '规则整理' }} · {{ recommendations.message }}</p>
+    <div class="row g-3">{% for item in recommendations.candidates %}<div class="col-xl-4"><article class="border rounded p-3 h-100">
+        <h3 class="h6">{{ loop.index }} · {{ item.name }} · {{ item.position }}</h3><p class="small text-secondary">{{ item.profile.source }} · {{ item.games }} 场 · 场均 {{ item.minutes }} 分钟{% if not item.supported %} · 样本有限{% endif %}</p>
+        <p>{{ item.reason }}</p><p class="small">外部每36分钟：助攻 {{ item.rates.assists }} · 篮板 {{ item.rates.rebounds }} · 三分 {{ item.rates.threes }} · 失误 {{ item.rates.turnovers }}</p>
+        {% for key,label in [('strength','技术特点'),('role','预期用法'),('risk','适应风险'),('test','试训重点')] %}<p class="small mb-2"><strong>{{ label }}</strong> {{ item.profile.fields[key] }}</p>{% endfor %}
+        <p class="small"><strong>优先核对</strong> {{ item.focus }}</p>
+        {% if item.priority %}<span class="badge text-bg-secondary">已在本队选秀板 · 第 {{ item.priority }} 位</span>{% else %}
+        <form method="post" action="{{ url_for('scouting',season=season) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="year" value="{{ workspace.year }}"><input type="hidden" name="prospect_id" value="{{ item.id }}"><input type="hidden" name="role_note" value="{{ item.profile.fields.role[:120] }}"><button class="btn btn-sm btn-outline-primary" name="action" value="save">加入本队选秀板</button></form>{% endif %}
+    </article></div>{% endfor %}</div>
+    <p class="small text-secondary mt-3 mb-0">外部数据只用于初筛，需通过录像和试训验证能否适应本联赛；不代表加盟后的统计预测。</p>
+    {% endif %}
+</section>
+
 {% if comparison %}
 <section id="comparison" class="border rounded p-3 mb-4">
     <h2 class="h5">候选比较 · {{ "AI 整理" if comparison.source == "model" else "规则整理" }}</h2>

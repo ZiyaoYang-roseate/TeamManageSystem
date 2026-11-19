@@ -1,0 +1,10 @@
+<section class="card mb-4" aria-labelledby="all-team-members">
+    <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1" id="all-team-members">本队球员</h2><p class="small text-secondary mb-0">本队完整球员名单。统计只计入 {{ season }} 赛季代表本队的已完赛表现；生涯效力球队可在球员主页查看。</p></div>
+    <div class="table-responsive"><table class="table align-middle mb-0">
+        <thead><tr><th>球员</th><th>位置</th><th>本队出场</th><th>场均得分</th><th>篮板</th><th>助攻</th></tr></thead>
+        <tbody>{% for player in members %}<tr>
+            <th><a href="{{ url_for('player_detail',player_id=player.id,season=season) }}">{{ player.name }}</a></th><td>{{ player.position }}</td>
+            <td>{{ player.games }}</td>{% for key in ['ppg','rpg','apg'] %}<td>{{ player[key] if player.games else '—' }}</td>{% endfor %}
+        </tr>{% else %}<tr><td colspan="6" class="text-secondary py-4">暂无球员记录。</td></tr>{% endfor %}</tbody>
+    </table></div>
+</section>

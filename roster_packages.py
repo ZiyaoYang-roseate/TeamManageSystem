@@ -3,6 +3,7 @@ from collections import Counter
 from basketball_fit import player_profiles
 from db import transaction
 from roster import max_contract_salary
+from roster_rating import rate_roster_change
 from roster_recommendations import SHORTLIST_LIMIT, TRIAL_SALARY, _recommend, _signing_options, trade_candidates
 from team_planning import _budget, _contracts, _projection
 from trade import validate_trade
@@ -59,7 +60,7 @@ def recommend_packages(team_id, season):
         cap = cursor.fetchone()
         if cap is None:
             return _recommend("roster_packages", [], games, priorities, "该赛季缺少工资帽数据。")
-        incoming_ids = sorted({row["payload"]["team2_outgoing_player_ids"][0] for row in trades})
+        incoming_ids = sorted({player_id for row in trades for player_id in row["payload"]["team2_outgoing_player_ids"]})
         placeholders = ",".join(["%s"] * len(incoming_ids))
         cursor.execute(
             f"""SELECT id, name, position, age, team_id FROM players
@@ -69,9 +70,6 @@ def recommend_packages(team_id, season):
         profiles = player_profiles(cursor, cursor.fetchall(), season)
         by_id = {row["id"]: row for row in profiles}
         own = [row for row in profiles if row["team_id"] == team_id]
-        if len(own) >= 15:
-            return _recommend("roster_packages", [], games, priorities,
-                              "本队阵容已满。一换一交易不腾出名额，先通过常规阵容操作留出位置。")
         baseline = _contracts(cursor, team_id)
         rival_count = Counter()
         used_signings = set()
@@ -87,15 +85,19 @@ def recommend_packages(team_id, season):
             remaining = cap["luxury_tax_line"] - _projection(after_trade, year)["payroll"]
             if remaining < TRIAL_SALARY:
                 continue
-            sent = trade["team1_outgoing_player_ids"][0]
-            received = trade["team2_outgoing_player_ids"][0]
-            if sent not in by_id or received not in by_id or by_id[received]["team_id"] != trade["team2_id"]:
+            sent = set(trade["team1_outgoing_player_ids"])
+            received = set(trade["team2_outgoing_player_ids"])
+            if not sent <= by_id.keys() or not received <= by_id.keys():
+                continue
+            if any(by_id[player_id]["team_id"] != trade["team2_id"] for player_id in received):
+                continue
+            if len(own)-len(sent)+len(received) >= 15:
                 continue
             next_roster = [
-                *[row for row in profiles if row["team_id"] is None or (row["team_id"] == team_id and row["id"] != sent)],
-                {**by_id[received], "team_id": team_id},
+                *[row for row in profiles if row["team_id"] is None or (row["team_id"] == team_id and row["id"] not in sent)],
+                *[{**by_id[player_id], "team_id": team_id} for player_id in sorted(received)],
             ]
-            offers = _signing_options(next_roster, team_id, season, cap, remaining, priorities)
+            offers = _signing_options(next_roster, team_id, season, cap, remaining, priorities, games)
             if not offers:
                 continue
             signing = next((offer for offer in offers if offer["payload"]["player_id"] not in used_signings), offers[0])
@@ -106,6 +108,13 @@ def recommend_packages(team_id, season):
                 "opponent": trade_plan["subtitle"],
                 "value": trade_plan["value"], "court_options": trade_plan["court_options"],
                 "profiles": [*trade_plan["profiles"], *signing["profiles"]],
+                "rating": rate_roster_change(
+                    own, [*[by_id[value] for value in sorted(received)],by_id[draft["player_id"]]],
+                    [by_id[value] for value in sorted(sent)], priorities, games,
+                    salary_change=_projection(after_signing,year)["payroll"]-_projection(baseline,year)["payroll"],
+                    projected_payroll=_projection(after_signing,year)["payroll"],
+                    cap_amount=int(cap["cap_amount"]),tax_line=int(cap["luxury_tax_line"]),
+                ),
                 "signing_notes": signing["notes"],
                 "budget": _budget(cursor, season, baseline, after_signing, after_trade),
                 "payload": {"trade": trade, "followup": {"player_id": draft["player_id"], "salary": draft["salary"]}},

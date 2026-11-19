@@ -23,11 +23,11 @@
         <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='review') }}" class="btn btn-outline-primary">赛后复盘</a>
         {% endif %}
         {% endif %}
-        <a href="{{ url_for('play_by_play', game_id=game.id) }}" class="btn btn-primary">
+        <a href="{{ url_for('play_by_play', game_id=game.id, origin='league' if request.args.get('origin') == 'league' else none) }}" class="btn btn-primary">
             <i class="bi bi-graph-up me-1"></i>逐回合日志
         </a>
-        <a href="{{ url_for('games') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i>返回比赛列表
+        <a href="{{ url_for('league_game',game_id=game.id) if current_user.role == ROLE_LEAGUE_ADMIN and request.args.get('origin') == 'league' else url_for('games',season=game.season) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>{{ "返回比赛处理" if current_user.role == ROLE_LEAGUE_ADMIN and request.args.get('origin') == 'league' else "返回比赛列表" }}
         </a>
     </div>
 </div>

@@ -22,8 +22,7 @@ def league_overview(season):
                g.home_team_id, g.away_team_id, g.home_score, g.away_score,
                h.name AS home, a.name AS away, h.abbreviation AS home_abbr, a.abbreviation AS away_abbr,
                COALESCE(hs.total, 0) AS home_starters, COALESCE(ast.total, 0) AS away_starters,
-               audit.status AS review_status,
-               EXISTS (SELECT 1 FROM play_by_play pb WHERE pb.game_id = g.id AND pb.period >= 4 AND pb.voided_at IS NULL) AS has_late_events
+               audit.status AS review_status
         FROM games g
         JOIN teams h ON h.id = g.home_team_id
         JOIN teams a ON a.id = g.away_team_id
@@ -40,25 +39,12 @@ def league_overview(season):
     scheduled = [game for game in games if game["status"] == "scheduled"]
     next_date = next((game["game_date"] for game in scheduled
                       if business_date is None or game["game_date"] > business_date), None)
-    watch_through = next_date or business_date
-    lineup = [
-        game for game in [*live, *scheduled]
-        if not game["starters_initialized"]
-        and (game["status"] == "live" or (watch_through and game["game_date"] <= watch_through))
-        and (game["home_starters"] != 5 or game["away_starters"] != 5)
-    ]
-    missing_clock = [
+    reviews = [
         game for game in finished
-        if game["period"] == 1 and game["seconds_remaining"] == 720 and game["has_late_events"]
+        if game["review_status"] == "open" or (game["review_status"] is None and game["home_score"] == game["away_score"])
     ]
-    missing_clock_ids = {game["id"] for game in missing_clock}
-    clock_flags = [
-        game for game in finished
-        if game["review_status"] == "open" or (
-            game["review_status"] is None
-            and (game["period"] < 4 or game["seconds_remaining"] != 0 or game["home_score"] == game["away_score"])
-            and game["id"] not in missing_clock_ids
-        )
+    blocking_games = [
+        game for game in [*live, *scheduled] if next_date and game["game_date"] < next_date
     ]
     managers = fetch_all(
         """
@@ -68,11 +54,11 @@ def league_overview(season):
         """
     )
     return {
-        "business_date": business_date, "next_date": next_date, "live": live[:6], "lineup": lineup[:8],
-        "clock_flags": clock_flags[:6],
-        "resolved_reviews": [game for game in finished if game["review_status"] == "resolved"][:6],
-        "live_count": len(live), "lineup_count": len(lineup),
-        "clock_flag_count": len(clock_flags), "missing_clock_count": len(missing_clock), "teams_count": len(managers),
+        "business_date": business_date, "next_date": next_date, "live": live,
+        "reviews": reviews, "completed": finished[:8],
+        "blocking_games": blocking_games, "can_advance": bool(next_date) and not blocking_games,
+        "day_games": [game for game in games if game["game_date"] == business_date],
+        "teams_count": len(managers),
         "unassigned": [team for team in managers if team["manager_id"] is None],
     }
 

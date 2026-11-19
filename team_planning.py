@@ -299,3 +299,54 @@ def draft_comparison(workspace, selected):
         index = int(picked["evidence_id"].removeprefix("candidate")) - 1
         comparisons[index]["focus"] = ACTIONS[picked["action_id"]]
     return {"source": source, "axis": axis, "candidates": comparisons, "selected": selected}
+
+
+def draft_recommendations(workspace):
+    from analysis_model import ACTIONS, configured_model, generate_content
+
+    axes = {"assists": (4, "draft_creation"), "rebounds": (7, "draft_rebounding"),
+            "threes": (2, "draft_spacing"), "turnovers": (3, "draft_pressure")}
+    expiring = {row["position"]: row["total"] for row in workspace["expiring"]}
+    ranked = []
+    for row in workspace["prospects"]:
+        profile = row["profile"]
+        if not profile["external"] or not row["games"] or not row["minutes"]:
+            continue
+        rates = {key: round(float(row[key])*36/float(row["minutes"]), 1) for key in axes}
+        supported = row["games"] >= 5 and row["games"]*row["minutes"] >= 100
+        score = .5*bool(expiring.get(row["position"])) + .5*supported
+        needs = [key for key in workspace["needs"] if key in axes]
+        for index, key in enumerate(needs):
+            scale = axes[key][0]
+            # External rates rank prospects, never predict league production.
+            score += (1/(1+rates[key]/scale) if key=="turnovers" else rates[key]/scale)/(index+1)
+        if not needs:
+            score += sum(rates[key]/axes[key][0] for key in ("assists","rebounds","threes"))/3
+        ranked.append((score,row,rates,supported))
+    ranked.sort(key=lambda item:(-item[0],item[1]["id"]))
+    shortlist = ranked[:8]
+    evidence=[]
+    for _,row,rates,supported in shortlist:
+        actions=list(dict.fromkeys([axes[key][1] for key in workspace["needs"] if key in axes]+["draft_sample"]))
+        evidence.append({"id":f"prospect{row['id']}","actions":actions,
+            "fact":f"候选 {row['name']}，{row['position']}，外部出处 {row['profile']['source']}，{row['games']}场、场均{row['minutes']}分钟。"
+            f"每36分钟初筛 {rates}。本队关注 {workspace['priorities']}，到期位置 {expiring}。"
+            f"技术特点、角色、风险、试训：{row['profile']['fields']}。"
+            + ("有基本样本。" if supported else "样本有限，先补看录像。")})
+    if not evidence:
+        return {"source":"rules","candidates":[],"message":"暂无具备外部出处和出场样本的候选人，请先补齐候选资料。"}
+    source,content=generate_content({"kind":"draft","warnings":[
+        "从候选中优先推荐能补上本队短板或到期轮换的人选，兼顾成长风险和试训。",
+        "外部比赛水平不同，不预测加盟后的统计，不声称一定能在本队签位选到。",
+    ],"evidence":evidence},configured_model())
+    selected={item["evidence_id"]:item["action_id"] for item in content["items"]}
+    by_evidence={f"prospect{r[1]['id']}":r for r in shortlist}
+    order=list(dict.fromkeys([*selected,*by_evidence]))[:3]
+    result=[]
+    for key in order:
+        _,row,rates,supported=by_evidence[key]
+        result.append({**row,"rates":rates,"supported":supported,
+            "reason":f"本队优先关注{'、'.join(workspace['priorities']) or '轮换储备'}。"
+                     +(f"{row['position']} 有 {expiring[row['position']]} 份合同即将到期，可提前考察接续人选。" if row['position'] in expiring else "结合现有轮换安排发展时间。"),
+            "focus":ACTIONS.get(selected.get(key),ACTIONS["draft_sample"])})
+    return {"source":source,"candidates":result,"message":"建议顺序用于考察优先级，不代表正式选秀顺位。"}

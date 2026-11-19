@@ -1,3 +1,52 @@
+function renderRosterRating(rating) {
+    const section = document.createElement("section");
+    section.className = "border rounded p-3 mb-3 small";
+    section.setAttribute("aria-label", "本队补强评级");
+    const heading = document.createElement("div");
+    heading.className = "d-flex flex-wrap align-items-center gap-2 mb-2";
+    const badge = document.createElement("strong");
+    const tones = {S: "success", A: "success", B: "primary", C: "warning", D: "danger", E: "danger"};
+    badge.className = `badge fs-5 text-bg-${tones[rating.grade] || "secondary"}`;
+    badge.textContent = rating.grade;
+    const title = document.createElement("strong");
+    title.textContent = `本队补强评级 · ${rating.label} · ${rating.score}/100`;
+    heading.append(badge, title);
+    const summary = document.createElement("p");
+    summary.className = "mb-2";
+    summary.textContent = rating.summary;
+    const details = document.createElement("details");
+    const caption = document.createElement("summary");
+    caption.textContent = "查看评级依据";
+    const method = document.createElement("p");
+    method.className = "text-secondary mt-2 mb-2";
+    method.textContent = `${rating.method} · 证据充分程度：${rating.confidence}`;
+    const dimensions = document.createElement("dl");
+    dimensions.className = "mb-2";
+    for (const dimension of rating.dimensions) {
+        const label = document.createElement("dt");
+        label.textContent = `${dimension.label} ${dimension.score}/${dimension.max}`;
+        const reason = document.createElement("dd");
+        reason.textContent = dimension.reason;
+        dimensions.append(label, reason);
+    }
+    const limits = document.createElement("ul");
+    limits.className = "text-warning-emphasis ps-3";
+    for (const limit of rating.limits) {
+        const item = document.createElement("li");
+        item.textContent = limit;
+        limits.append(item);
+    }
+    const note = document.createElement("p");
+    note.className = "text-secondary mb-1";
+    note.textContent = rating.note;
+    const scale = document.createElement("p");
+    scale.className = "text-secondary mb-0";
+    scale.textContent = rating.scale;
+    details.append(caption, method, dimensions, limits, note, scale);
+    section.append(heading, summary, details);
+    return section;
+}
+
 async function requestDecisionAnalysis(url, payload, csrfToken, button, box, isCurrent) {
     button.disabled = true;
     box.textContent = "正在生成分析…";
@@ -77,7 +126,9 @@ async function requestDecisionAnalysis(url, payload, csrfToken, button, box, isC
             description.textContent = "球员数据按赛季每 36 分钟折算。用于比较历史表现，实际效果取决于上场时间和轮换角色。";
             comparison.append(scroll, description);
         }
-        box.replaceChildren(title, checks, list, comparison);
+        box.replaceChildren(title);
+        if (analysis.rating) box.append(renderRosterRating(analysis.rating));
+        box.append(checks, list, comparison);
     } catch (error) {
         if (isCurrent()) box.textContent = error.message;
     } finally {
@@ -140,6 +191,7 @@ function bindRosterAssistant({endpoint, season, csrfToken, applyLabel, apply}) {
                 subtitle.className = "small text-secondary mb-2";
                 subtitle.textContent = plan.subtitle;
                 card.append(title, subtitle);
+                if (plan.rating) card.append(renderRosterRating(plan.rating));
                 if (plan.value) {
                     const value = document.createElement("div");
                     value.className = "rounded bg-primary-subtle text-primary-emphasis p-2 mb-3 small";

@@ -257,9 +257,9 @@
             document.getElementById("starterReadinessTeams").textContent =
                 `${game.home_team_name}（${ready(game.home_team_id)}） · ${game.away_team_name}（${ready(game.away_team_id)}）`;
         }
-        const canEnd = game.period >= 4 && game.seconds_remaining === 0 && game.home_score !== game.away_score;
+        const canEnd = game.home_score !== game.away_score;
         endButton.disabled = isSubmitting || !live || !canScoreToday || !canEnd;
-        endButton.title = canEnd ? "" : "末节时钟归零且比分分出胜负后才能结束";
+        endButton.title = canEnd ? "按当前比分确认完赛" : "比分打平时不能完赛";
         const reverse = document.getElementById("reverseEventButton");
         if (reverse) reverse.disabled = isSubmitting || !live || !canScoreToday;
         document.querySelectorAll(".score-action").forEach((button) => {

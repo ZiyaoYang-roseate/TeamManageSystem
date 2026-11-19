@@ -1,0 +1,14 @@
+{% if plan.rating %}
+{% set rating = plan.rating %}
+{% set tones = {'S':'success','A':'success','B':'primary','C':'warning','D':'danger','E':'danger'} %}
+<section class="border rounded p-3 mt-3 small" aria-label="本队补强评级">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2"><strong class="badge fs-5 text-bg-{{ tones[rating.grade] }}">{{ rating.grade }}</strong><strong>本队补强评级 · {{ rating.label }} · {{ rating.score }}/100</strong></div>
+    <p class="mb-2">{{ rating.summary }}</p>
+    <details><summary>查看评级依据</summary>
+        <p class="text-secondary mt-2">{{ rating.method }} · 证据充分程度：{{ rating.confidence }}</p>
+        <dl>{% for dimension in rating.dimensions %}<dt>{{ dimension.label }} {{ dimension.score }}/{{ dimension.max }}</dt><dd>{{ dimension.reason }}</dd>{% endfor %}</dl>
+        {% if rating.limits %}<ul class="text-warning-emphasis ps-3">{% for limit in rating.limits %}<li>{{ limit }}</li>{% endfor %}</ul>{% endif %}
+        <p class="text-secondary mb-1">{{ rating.note }}</p><p class="text-secondary mb-0">{{ rating.scale }}</p>
+    </details>
+</section>
+{% endif %}

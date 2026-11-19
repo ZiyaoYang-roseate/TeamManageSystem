@@ -147,15 +147,17 @@ class ScorekeeperRuleTests(unittest.TestCase):
         with self.assertRaisesRegex(scorekeeper.ScorekeeperError, "5:00"):
             scorekeeper._validate_overtime_transition(tied_regulation_end, 5, 299)
 
-    def test_first_quarter_lead_does_not_allow_finishing(self):
+    def test_first_quarter_lead_allows_finishing_and_preserves_clock(self):
         cursor = FakeCursor(fetch_one_rows=[{
             "id": 7, "game_date": date(2025, 12, 4), "business_date": date(2025, 12, 4),
             "status": "live", "starters_initialized": 1, "home_score": 5, "away_score": 2,
             "period": 1, "seconds_remaining": 480,
-        }])
-        with patch.object(scorekeeper, "transaction", fake_transaction_for(cursor)), self.assertRaisesRegex(scorekeeper.ScorekeeperError, "时钟归零"):
-            scorekeeper.finish_game(7)
-        self.assertFalse(any("UPDATE games" in sql for sql, _ in cursor.executions))
+        }, {"id": 7, "status": "finished", "home_score": 5, "away_score": 2, "period": 1, "seconds_remaining": 480}])
+        with patch.object(scorekeeper, "transaction", fake_transaction_for(cursor)), patch.object(scorekeeper, "invalidate_all"):
+            result = scorekeeper.finish_game(7)
+        self.assertEqual(result["game"]["period"], 1)
+        self.assertEqual(result["game"]["seconds_remaining"], 480)
+        self.assertTrue(any("UPDATE games SET status = 'finished'" in sql for sql, _ in cursor.executions))
 
     def test_tied_live_game_cannot_finish(self):
         cursor = FakeCursor(

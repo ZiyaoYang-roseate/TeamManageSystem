@@ -49,6 +49,7 @@ class MySQLDeliveryTests(unittest.TestCase):
         official = self.client("official", "league_admin")
         keeper = self.client("keeper", "scorekeeper")
         self.assertEqual(official.get("/league").status_code, 200)
+
         self.assertEqual(home.get("/my-team").status_code, 200)
         self.assertEqual(keeper.get("/scorekeeper/calendar").status_code, 200)
         urls = f"/api/scorekeeper/game/{game_id}"
@@ -132,3 +133,146 @@ class MySQLDeliveryTests(unittest.TestCase):
         self.assertEqual(away.get(f"/games/{game_id}").status_code, 200)
         self.assertEqual(away.get(result.location).status_code, 200)
         self.assertEqual(home.get("/my-team").status_code, 302)
+
+    def test_midgame_completion_from_league_page_and_lineup_recommendation(self):
+        fixture = fetch_one(
+            """SELECT g.* FROM games g JOIN teams h ON h.id=g.home_team_id JOIN teams a ON a.id=g.away_team_id
+               WHERE g.status='scheduled' AND g.season=%s AND h.archived_at IS NULL AND a.archived_at IS NULL
+               ORDER BY g.game_date,g.id LIMIT 1""", (SEASON,)
+        )
+        gid = fixture["id"]
+        execute("UPDATE scorekeeper_business_dates SET business_date=%s WHERE season=%s",
+                (fixture["game_date"], SEASON))
+        clients = {}
+        for role, team in (("league_admin", None), ("scorekeeper", None), ("management", fixture["home_team_id"])):
+            user = fetch_one("SELECT id FROM users WHERE team_id=%s", (team,)) if team else fetch_one(
+                "SELECT id FROM users WHERE role=%s LIMIT 1", (role,)
+            )
+            if user is None:
+                clients[role] = self.client("midgame_manager", role, team)
+            else:
+                clients[role] = app.test_client()
+                with clients[role].session_transaction() as session:
+                    session["user_id"] = user["id"]
+                    session["_csrf_token"] = "integration"
+        token = {"X-CSRF-Token": "integration"}
+        manager, official, keeper = (clients[key] for key in ("management", "league_admin", "scorekeeper"))
+        with patch("analysis_routes.configured_model", return_value=None):
+            report = manager.post(f"/games/{gid}/analysis/scout", headers=token)
+        self.assertEqual(report.status_code, 303)
+        self.assertIn("推荐本队首发五人", manager.get(report.location).get_data(as_text=True))
+        for team in (fixture["home_team_id"], fixture["away_team_id"]):
+            players = fetch_all("SELECT id FROM players WHERE team_id=%s AND archived_at IS NULL ORDER BY id LIMIT 5", (team,))
+            for player in players:
+                execute("INSERT INTO game_starters(game_id,team_id,player_id) VALUES (%s,%s,%s)", (gid, team, player["id"]))
+        base = f"/api/scorekeeper/game/{gid}"
+        self.assertEqual(keeper.post(base + "/start", headers=token).status_code, 200)
+        self.assertEqual(official.post(f"/league/games/{gid}", data={"action": "finish"}, headers=token).status_code, 303)
+        self.assertEqual(fetch_one("SELECT status FROM games WHERE id=%s", (gid,))["status"], "live")
+        actor = fetch_one("SELECT player_id FROM game_starters WHERE game_id=%s LIMIT 1", (gid,))["player_id"]
+        self.assertEqual(keeper.post(base + "/update", json={"player_id": actor, "action": "add_point", "value": 1}, headers=token).status_code, 200)
+        self.assertEqual(manager.post(f"/league/games/{gid}", data={"action": "finish"}, headers=token).status_code, 403)
+        self.assertEqual(official.post(f"/league/games/{gid}", data={"action": "finish"}, headers=token).status_code, 303)
+        final = fetch_one("SELECT status,period,seconds_remaining FROM games WHERE id=%s", (gid,))
+        self.assertEqual(final, {"status": "finished", "period": 1, "seconds_remaining": 720})
+        self.assertIn("返回比赛处理", official.get(f"/games/{gid}?origin=league").get_data(as_text=True))
+        self.assertEqual(official.get("/league").status_code, 200)
+
+    def test_new_player_directory_draft_assistant_and_multi_trade_application(self):
+        from roster_recommendations import trade_candidates
+        from player_directory import team_members
+        from schedule_order import ordered_games
+        from flask import template_rendered
+
+        team = fetch_one("SELECT id FROM teams WHERE archived_at IS NULL ORDER BY id DESC LIMIT 1")["id"]
+        manager = self.client("new_features_manager", "management", team)
+        keeper = self.client("new_features_keeper", "scorekeeper")
+        # The candidate search considers only teams that have a receiving manager.
+        for row in fetch_all("SELECT t.id FROM teams t WHERE t.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.team_id=t.id AND u.role='management')"):
+            self.client(f"new_features_gm_{row['id']}", "management", row["id"])
+        for mode in ("average", "total"):
+            for metric in ("points", "rebounds", "assists", "steals", "blocks", "threes"):
+                response = manager.get(f"/analytics?season={SEASON}&mode={mode}&metric={metric}")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("完整榜单", response.get_data(as_text=True))
+        self.assertEqual(manager.get("/players").status_code, 302)
+        own = manager.get(f"/my-team?season={SEASON}").get_data(as_text=True)
+        for member in team_members(team, SEASON):
+            self.assertIn(member["name"], own)
+        keeper_page = keeper.get("/analytics").get_data(as_text=True)
+        self.assertNotIn('href="/compare', keeper_page)
+        profile_id = fetch_one("SELECT id FROM players WHERE team_id=%s LIMIT 1", (team,))["id"]
+        self.assertNotIn('href="/compare', keeper.get(f"/players/{profile_id}").get_data(as_text=True))
+        contexts = []
+        def record(sender, template, context, **extra):
+            contexts.append(context)
+        template_rendered.connect(record, app)
+        try:
+            self.assertEqual(manager.get(f"/games?season={SEASON}&per_page=100").status_code, 200)
+            context = contexts[-1]
+            self.assertEqual(context["games"], ordered_games(context["games"], context["business_date"]))
+            self.assertEqual(keeper.get(f"/scorekeeper/calendar?season={SEASON}").status_code, 200)
+            context = contexts[-1]
+            self.assertEqual(context["games"], ordered_games(context["games"], context["business_date"]))
+        finally:
+            template_rendered.disconnect(record, app)
+        with patch("analysis_model.configured_model", return_value=None):
+            draft = manager.post(f"/scouting?season={SEASON}", headers={"X-CSRF-Token":"integration"},
+                                 data={"action":"recommend", "year":2026})
+        self.assertEqual(draft.status_code, 200)
+        self.assertIn("试训重点", draft.get_data(as_text=True))
+        candidates, _, _, _ = trade_candidates(team, SEASON)
+        multi = next((row for row in candidates if len(row["payload"]["team1_outgoing_player_ids"])+len(row["payload"]["team2_outgoing_player_ids"])>2), None)
+        self.assertIsNotNone(multi, "demo must supply at least one legal multi-player option")
+        payload = multi["payload"]
+        self.assertIn(multi["rating"]["grade"], {"S","A","B","C","D","E"})
+        self.assertEqual(len(multi["rating"]["dimensions"]),3)
+        self.assertTrue(validate_trade(payload)["is_valid"])
+        with patch("decision_analysis.configured_model",return_value=None):
+            review=manager.post("/api/trades/analysis",headers={"X-CSRF-Token":"integration"},json=payload)
+        self.assertEqual(review.status_code,200)
+        self.assertIn(review.get_json()["rating"]["grade"],{"S","A","B","C","D","E"})
+        response = manager.post("/api/trade-proposals", headers={"X-CSRF-Token":"integration"}, json=payload)
+        self.assertEqual(response.status_code, 201)
+        rival = fetch_one("SELECT id FROM users WHERE team_id=%s", (payload["team2_id"],))
+        receiver = app.test_client()
+        with receiver.session_transaction() as session:
+            session["user_id"] = rival["id"]
+            session["_csrf_token"] = "integration"
+        proposal = response.get_json()["proposal_id"]
+        receiver.post(f"/trade-proposals/{proposal}/accept", headers={"X-CSRF-Token":"integration"})
+        self.assertEqual(fetch_one("SELECT status FROM trade_proposals WHERE id=%s", (proposal,))["status"], "accepted")
+        for player_id in payload["team2_outgoing_player_ids"]:
+            self.assertEqual(fetch_one("SELECT team_id FROM players WHERE id=%s", (player_id,))["team_id"], team)
+            from player_profiles import player_career_teams
+            career=player_career_teams(player_id)
+            self.assertTrue({team,payload["team2_id"]}<={row["id"] for row in career})
+            self.assertNotIn(player_id,{row["id"] for row in team_members(payload["team2_id"],SEASON)})
+            page=manager.get(f"/players/{player_id}").get_data(as_text=True)
+            self.assertIn("生涯效力球队",page)
+
+    def test_zz_signing_and_combined_plans_expose_value_grades(self):
+        user=fetch_one("SELECT u.id,u.team_id FROM users u JOIN teams t ON t.id=u.team_id WHERE u.role='management' AND t.archived_at IS NULL ORDER BY t.id DESC LIMIT 1")
+        manager=app.test_client()
+        with manager.session_transaction() as session:
+            session["user_id"]=user["id"]
+            session["_csrf_token"]="integration"
+        free_agent=fetch_one("SELECT id FROM players WHERE team_id IS NULL AND archived_at IS NULL ORDER BY id LIMIT 1")["id"]
+        target=fetch_one("SELECT id FROM free_agency_targets WHERE team_id=%s AND player_id=%s",(user["team_id"],free_agent))
+        if not target:
+            execute("INSERT INTO free_agency_targets(team_id,player_id,tier,priority_order) VALUES (%s,%s,'Vet Min',1)",(user["team_id"],free_agent))
+            target=fetch_one("SELECT id FROM free_agency_targets WHERE team_id=%s AND player_id=%s",(user["team_id"],free_agent))
+        token={"X-CSRF-Token":"integration"}
+        with patch("decision_analysis.configured_model",return_value=None):
+            result=manager.post("/api/free-agency/analysis",headers=token,json={"target_id":target["id"],"season":SEASON,"years":1,"year1_salary":1200000})
+        self.assertEqual(result.status_code,200)
+        self.assertIn("rating",result.get_json())
+        self.assertEqual(result.get_json()["rating"]["method"],"赛场补强60% · 轮换适配25% · 薪资成本15%")
+        with patch("roster_recommendations.configured_model",return_value=None):
+            plans=manager.post("/api/free-agency/recommendations",headers=token,json={"season":SEASON})
+            packages=manager.post(f"/salary?season={SEASON}",headers=token)
+        self.assertEqual(plans.status_code,200)
+        self.assertTrue(plans.get_json()["plans"])
+        self.assertTrue(all(plan.get("rating") for plan in plans.get_json()["plans"]))
+        self.assertEqual(packages.status_code,200)
+        self.assertIn("本队补强评级",packages.get_data(as_text=True))

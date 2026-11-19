@@ -9,7 +9,7 @@
         <h1 class="h3 mb-1">{{ title }}</h1>
         <div class="text-secondary">{{ game.home_team_name }} vs {{ game.away_team_name }} · {{ game.game_date }}</div>
     </div>
-    <a href="{{ url_for('game_detail', game_id=game.id) }}" class="btn btn-outline-secondary">比赛详情</a>
+    <a href="{{ url_for('league_game',game_id=game.id) if current_user.role == ROLE_LEAGUE_ADMIN else url_for('game_detail', game_id=game.id) }}" class="btn btn-outline-secondary">{{ "返回比赛处理" if current_user.role == ROLE_LEAGUE_ADMIN else "比赛详情" }}</a>
 </header>
 
 <section aria-label="报告设置" class="d-flex flex-wrap align-items-end gap-3 mb-4">
@@ -40,6 +40,35 @@
 </section>
 
 {% if kind == 'scout' %}
+{% if chosen_lineup %}
+<section class="card card-body mb-4" aria-labelledby="recommended-starters">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h2 class="h5 mb-0" id="recommended-starters">推荐本队首发五人</h2>
+        <span class="small text-secondary">{{ "AI 推荐" if report.source == "model" else "规则推荐" }}</span>
+    </div>
+    <p class="small">{{ chosen_lineup.reason }}</p>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>球员</th><th>位置</th><th>赛前样本</th><th>每 36 分钟表现</th></tr></thead>
+            <tbody>
+            {% for player in chosen_lineup.players %}
+            <tr><th scope="row">{{ player.name }}{% if player.status == "questionable" %} · 出战待定{% endif %}</th>
+                <td>{{ player.position }}</td><td>{{ player.games }} 场 · {{ player.minutes }} 分钟</td>
+                <td>{% if player.rates %}得分 {{ player.rates.points }} · 助攻 {{ player.rates.assists }} · 篮板 {{ player.rates.rebounds }} · 三分命中 {{ player.rates.threes }}{% else %}暂无有效历史样本{% endif %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if availability_players %}
+    <div>
+        <button class="btn btn-outline-primary btn-sm" type="button" data-use-lineup="{{ chosen_lineup.players | map(attribute='id') | list | tojson | forceescape }}">填入首发勾选</button>
+        <span class="small text-secondary ms-2" data-lineup-feedback aria-live="polite">核对后点击「提交本队首发五人」。</span>
+    </div>
+    {% endif %}
+</section>
+{% elif snapshot.get("starting_lineups") and not report %}
+<p class="small text-secondary">点击「生成赛前分析」获取本队首发五人建议。</p>
+{% endif %}
 {% if snapshot.history_before %}
 <p class="text-secondary small">统计范围为 {{ snapshot.history_before }} 之前对手的全部完赛记录，共 {{ chart_rows | length }} 场。</p>
 {% endif %}
@@ -232,7 +261,7 @@
 {% if snapshot.evidence %}
 <section class="mb-4" aria-labelledby="evidence-title">
     <h2 id="evidence-title" class="h5 mb-3">比赛证据</h2>
-    {% for item in snapshot.evidence %}
+    {% for item in snapshot.evidence if not item.id.startswith('starters-') or (chosen_lineup and item.id == chosen_lineup.id) %}
     <article id="evidence-{{ item.id }}" class="py-3 border-top">
         <h3 class="h6">{{ item.title }}</h3>
         <p class="mb-1">{{ item.fact }}</p>
@@ -302,6 +331,28 @@ document.querySelectorAll("[data-generate]").forEach((form) => {
         form.dataset.submitting = "true";
         form.setAttribute("aria-busy", "true");
         if (event.submitter) event.submitter.textContent = "正在生成…";
+    });
+});
+document.querySelectorAll("[data-use-lineup]").forEach((button) => {
+    button.addEventListener("click", () => {
+        const ids = JSON.parse(button.dataset.useLineup).map(String);
+        const form = document.querySelector("[data-starters]");
+        if (!form) return;
+        const picks = [...form.querySelectorAll('input[name="player_ids"]')];
+        const feedback = document.querySelector("[data-lineup-feedback]");
+        if (ids.some(id => !picks.some(pick => pick.value === id && !pick.hasAttribute("data-unavailable")))) {
+            feedback.textContent = "推荐中的球员已不可用，请按最新数据重新生成。";
+            return;
+        }
+        picks.forEach(pick => {
+            if (!pick.hasAttribute("data-unavailable")) {
+                pick.disabled = false;
+                pick.checked = ids.includes(pick.value);
+            }
+        });
+        form.dispatchEvent(new Event("change", {bubbles: true}));
+        form.scrollIntoView({behavior: "smooth", block: "center"});
+        feedback.textContent = "已填入五人，请核对并提交。";
     });
 });
 const chart = document.getElementById("analysisTrend");

@@ -15,7 +15,7 @@
 <div class="player-compare">
     <header class="mb-3 d-flex align-items-baseline justify-content-between flex-wrap gap-2">
         <h1 class="h3 mb-0">球员对比</h1>
-        <a href="{{ url_for('players', season=season) }}" class="small">浏览球员档案</a>
+        <a href="{{ url_for('analytics', tab='all', season=season) }}" class="small">浏览全部球员</a>
     </header>
 
     <form class="compare-pickers mb-4" method="get">

@@ -6,6 +6,7 @@ from itertools import groupby
 from constants import SHOT_ZONES
 from db import transaction
 from validation import BusinessError
+from starting_lineups import add_lineup_evidence
 
 
 METRICS_VERSION = "1"
@@ -503,7 +504,10 @@ def load_evidence(game_id, team_id, kind):
         )
         own_profile = cursor.fetchone()
         archived = game["status"] == "finished" or bool(game["starters_initialized"])
-        return build_scout(
+        snapshot = build_scout(
             game, team_id, opponent, history, stats, shots, availability,
             published_starters(cursor, game_id, historical=archived), own_profile,
         )
+        if awaiting_starters(game):
+            add_lineup_evidence(cursor, game, team_id, snapshot)
+        return snapshot

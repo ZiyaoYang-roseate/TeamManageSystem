@@ -105,6 +105,12 @@ def _render(game, team_id, teams, snapshot, report=None):
     kind = snapshot["kind"]
     editable_teams = [id for id in teams if can_edit_team(id)]
     availability_players = []
+    chosen_lineup = None
+    if report and report.get("content"):
+        selected_ids = {item["evidence_id"] for item in report["content"]["items"]}
+        chosen_lineup = next(
+            (lineup for lineup in snapshot.get("starting_lineups", []) if lineup["id"] in selected_ids), None
+        )
     if kind == "scout" and awaiting_starters(game) and editable_teams:
         placeholders = ", ".join(["%s"] * len(editable_teams))
         availability_players = fetch_all(
@@ -126,6 +132,7 @@ def _render(game, team_id, teams, snapshot, report=None):
         can_generate=kind == "scout" or game["status"] == "finished",
         can_publish_availability=game["status"] == "scheduled",
         availability_players=availability_players, availability_labels=AVAILABILITY_LABELS,
+        chosen_lineup=chosen_lineup,
         preview=rules_report([item for item in snapshot["evidence"] if item.get("recommendation")]),
     ), {"Cache-Control": "private, no-store"} if kind == "scout" else {}
 

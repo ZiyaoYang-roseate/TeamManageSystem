@@ -136,3 +136,31 @@ def player_contract(player_id, team_id, season):
         """,
         (year, player_id, team_id, year, year),
     )
+
+
+def player_career_teams(player_id):
+    return fetch_all(
+        """
+        WITH appearances AS (
+            SELECT s.team_id,COUNT(DISTINCT g.id) AS games,
+                   MIN(g.game_date) AS first_game,MAX(g.game_date) AS last_game,
+                   GROUP_CONCAT(DISTINCT g.season ORDER BY g.season SEPARATOR '、') AS seasons
+            FROM player_game_stats s JOIN games g ON g.id=s.game_id
+            WHERE s.player_id=%s AND g.status='finished'
+              AND s.team_id IN (g.home_team_id,g.away_team_id)
+              AND (s.seconds_played>0 OR s.minutes_played>0 OR s.points>0
+                   OR s.rebounds>0 OR s.assists>0 OR s.steals>0 OR s.blocks>0
+                   OR s.turnovers>0 OR s.fouls>0 OR s.field_goals_attempted>0 OR s.free_throws_attempted>0)
+            GROUP BY s.team_id
+        )
+        SELECT t.id,t.name,t.abbreviation,COALESCE(p.team_id=t.id,0) AS is_current,
+               COALESCE(a.games,0) AS games,a.first_game,a.last_game,a.seasons
+        FROM players p JOIN teams t ON (
+            t.id=p.team_id OR EXISTS (SELECT 1 FROM contracts c WHERE c.player_id=p.id AND c.team_id=t.id)
+            OR EXISTS (SELECT 1 FROM appearances a WHERE a.team_id=t.id)
+        )
+        LEFT JOIN appearances a ON a.team_id=t.id WHERE p.id=%s
+        ORDER BY is_current DESC,a.last_game DESC,t.id
+        """,
+        (player_id,player_id),
+    )

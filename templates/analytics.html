@@ -1,112 +1,29 @@
 {% extends "base.html" %}
-
-{% block title %}球员数据 - NBA 球队管理系统{% endblock %}
-
+{% block title %}球员数据{% endblock %}
 {% block content %}
-<div id="serverSearchScope" data-search-scope="all-player-stats" hidden></div>
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-    <div>
-        <h1 class="h3 mb-1">球员数据</h1>
-        <div class="text-secondary small">常规技术统计与高阶效率指标</div>
-    </div>
+<header class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div><h1 class="h3 mb-1">球员数据</h1><p class="text-secondary mb-0">{{ season }} 赛季 · 完赛排行榜，点击球员姓名查看完整主页。</p></div>
+    <div class="btn-group" aria-label="统计口径">{% for key,label in [('average','场均'),('total','总计')] %}<a class="btn btn-{{ 'primary' if mode==key else 'outline-primary' }}" href="{{ url_for('analytics',season=season,mode=key,metric=metric,tab=tab,q=search) }}">{{ label }}</a>{% endfor %}</div>
+</header>
+<div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mb-4">
+{% for board in boards %}<section class="col"><div class="card h-100">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3"><h2 class="h6 mb-0">{{ '场均' if mode=='average' else '总' }}{{ board.label }}榜</h2><a class="small" href="{{ url_for('analytics',season=season,mode=mode,metric=board.metric) }}#rankings">完整榜单 →</a></div>
+    <ol class="list-group list-group-flush list-group-numbered">
+    {% for player in board.players %}<li class="list-group-item d-flex align-items-center gap-2 py-3"><div class="ms-1 flex-grow-1"><a class="fw-semibold" href="{{ url_for('player_detail',player_id=player.id,season=season) }}">{{ player.name }}</a><div class="small text-secondary">{{ player.team_name }} · {{ player.games }} 场</div></div><strong>{{ '%.1f'|format(player[board.metric]) if mode=='average' else player[board.metric]|int }}</strong><span class="small text-secondary">{{ board.unit }}</span></li>
+    {% else %}<li class="list-group-item text-secondary">暂无完赛出场数据</li>{% endfor %}
+    </ol>
+</div></section>{% endfor %}
 </div>
-
-<section class="mb-5">
-    <h2 class="h5 mb-3">球员常规数据与高阶指标</h2>
-    <div class="card shadow-sm">
-        <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <span class="small text-secondary">
-                {% if search %}
-                    在该赛季全部球员数据中搜索“{{ search }}”，共找到 {{ total }} 条
-                {% else %}
-                    按 TS% 降序展示该赛季全部球员，共 {{ total }} 条
-                {% endif %}
-            </span>
-            {% if search %}
-            <a href="{{ url_for('analytics', season=season, per_page=per_page) }}" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-lg me-1"></i>清除搜索
-            </a>
-            {% endif %}
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th scope="col">球员</th>
-                        <th scope="col">球队</th>
-                        <th scope="col">场次</th>
-                        <th scope="col">时间</th>
-                        <th scope="col">得分</th>
-                        <th scope="col">篮板</th>
-                        <th scope="col">助攻</th>
-                        <th scope="col">抢断</th>
-                        <th scope="col">盖帽</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="球员在场期间球队净胜分">总正负值</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="将正负值标准化为每 48 分钟表现">每 48 分钟净效率</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="得分 / (2 × (出手数 + 0.44 × 罚球数))">TS%</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for player in players %}
-                    <tr>
-                        <td class="fw-semibold text-nowrap">{{ player.name }}</td>
-                        <td>{{ player.abbreviation }}</td>
-                        <td>{{ player.games_played }}</td>
-                        <td>{{ player.mpg }}</td>
-                        <td class="fw-semibold">{{ player.ppg }}</td>
-                        <td>{{ player.rpg }}</td>
-                        <td>{{ player.apg }}</td>
-                        <td>{{ player.spg }}</td>
-                        <td>{{ player.bpg }}</td>
-                        <td class="{{ 'text-success' if player.plus_minus > 0 else 'text-danger' }}">{{ player.plus_minus }}</td>
-                        <td>{{ player.net_rating_per48 }}</td>
-                        <td class="fw-semibold">{{ player.ts_percent }}%</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="12" class="text-center text-muted py-4">暂无球员数据</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% include "_pagination.html" %}
+<section id="rankings" class="card">
+<div class="card-header bg-transparent p-3">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3"><div class="btn-group">{% for key,label in [('ranking','排行榜'),('all','全部球员')] %}<a class="btn btn-sm btn-{{ 'primary' if tab==key else 'outline-primary' }}" href="{{ url_for('analytics',season=season,mode=mode,metric=metric,tab=key,q=search) }}#rankings">{{ label }}</a>{% endfor %}</div>
+    {% if current_user.role == ROLE_LEAGUE_ADMIN %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('add_player') }}">新增球员</a>{% endif %}</div>
+    <nav class="d-flex flex-wrap gap-2 mb-3" aria-label="排行榜指标">{% for key,label in metrics.items() %}<a class="btn btn-sm btn-{{ 'primary' if metric==key else 'outline-secondary' }}" href="{{ url_for('analytics',season=season,mode=mode,metric=key,tab=tab,q=search) }}#rankings">{{ label[0] }}</a>{% endfor %}</nav>
+    <form method="get" class="d-flex gap-2"><input type="hidden" name="season" value="{{ season }}"><input type="hidden" name="metric" value="{{ metric }}"><input type="hidden" name="mode" value="{{ mode }}"><input type="hidden" name="tab" value="{{ tab }}"><input class="form-control" name="q" value="{{ search }}" aria-label="搜索球员或球队" placeholder="搜索球员、球队或位置"><button class="btn btn-outline-primary">搜索</button></form>
+</div>
+<div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>排名</th><th>球员</th><th>所属球队</th><th>位置</th><th>场次</th>{% for key,label in metrics.items() %}<th class="{{ 'text-primary' if key==metric else '' }}">{{ label[0] }}{% if key==metric %} ↓{% endif %}</th>{% endfor %}</tr></thead>
+<tbody>{% for player in players %}<tr><td>{{ offset+loop.index if player.games else '—' }}</td><th><a href="{{ url_for('player_detail',player_id=player.id,season=season) }}">{{ player.name }}</a>{% if player.archived_at %}<span class="badge text-bg-secondary ms-1">归档</span>{% endif %}</th><td>{{ player.team_name }}</td><td>{{ player.position }}</td><td>{{ player.games }}</td>{% for key in metrics %}<td class="{{ 'fw-bold text-primary' if key==metric else '' }}">{% if player.games %}{{ '%.1f'|format(player[key]) if mode=='average' else player[key]|int }}{% else %}—{% endif %}</td>{% endfor %}</tr>{% else %}<tr><td colspan="11" class="text-secondary py-4 text-center">没有符合条件的球员。</td></tr>{% endfor %}</tbody></table></div>
+<div class="card-footer bg-transparent d-flex justify-content-between align-items-center"><span class="small text-secondary">共 {{ total }} 人 · 第 {{ page }} / {{ total_pages }} 页 · 所有榜单降序排列</span><div class="btn-group">{% if page>1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analytics',season=season,mode=mode,metric=metric,tab=tab,q=search,page=page-1) }}#rankings">上一页</a>{% endif %}{% if page<total_pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analytics',season=season,mode=mode,metric=metric,tab=tab,q=search,page=page+1) }}#rankings">下一页</a>{% endif %}</div></div>
 </section>
-
-<section>
-    <h2 class="h5 mb-3">球队百回合攻防效率</h2>
-    <div class="card shadow-sm">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th scope="col">球队</th>
-                        <th scope="col">回合数</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="球队每 100 回合得分">进攻效率</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="球队每 100 回合失分">防守效率</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="进攻效率减防守效率">净效率</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for team in teams %}
-                    <tr>
-                        <td class="fw-semibold text-nowrap">
-                            {{ team.name }} <span class="text-secondary">({{ team.abbreviation }})</span>
-                        </td>
-                        <td>{{ team.possessions }}</td>
-                        <td>{{ team.off_rating }}</td>
-                        <td>{{ team.def_rating }}</td>
-                        <td class="fw-semibold {{ 'text-success' if team.net_rating > 0 else 'text-danger' }}">{{ team.net_rating }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted py-4">暂无球队数据</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
+<p class="small text-secondary mt-3">场均按实际出场记录计算，总计按完赛数据累加。同值时按出场数、球员编号排序。所属球队为当前归属，赛季统计包含球员转队前后的表现。</p>
 {% endblock %}

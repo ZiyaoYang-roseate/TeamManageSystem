@@ -4,6 +4,7 @@ from analysis_model import ACTIONS, configured_model, generate_content
 from basketball_fit import METRICS, PRIORITIES, display_profile, per_36, player_profiles, reliable, team_priorities
 from cba import validate_and_calculate_offer
 from db import transaction
+from roster_rating import rate_roster_change
 from trade import validate_trade
 from validation import BusinessError
 
@@ -13,12 +14,13 @@ def _factor(key, title, fact, action, model_fact, recommendation=None):
             "model_fact": model_fact, "recommendation": recommendation}
 
 
-def _result(kind, factors, checks, profiles, baseline):
+def _result(kind, factors, checks, profiles, baseline, rating=None):
     # The model ranks categories. Exact terms, identities, and rule details stay in the app.
     source, report = generate_content({"kind": kind, "evidence": factors, "warnings": []}, configured_model())
     by_id = {item["id"]: item for item in factors}
     return {
         "source": source,
+        "rating": rating,
         "checks": checks,
         "profiles": profiles,
         "metric_labels": METRICS,
@@ -91,7 +93,7 @@ def analyze_signing(team_id, target_id, terms):
         profiles = player_profiles(cursor, [player, *roster], terms["season"])
         candidate, peers = profiles[0], [row for row in profiles[1:] if row["position"] == player["position"]]
         baseline = team_priorities(cursor, team_id, terms["season"])
-        cursor.execute("SELECT luxury_tax_line FROM salary_caps WHERE season = %s", (terms["season"],))
+        cursor.execute("SELECT cap_amount,luxury_tax_line FROM salary_caps WHERE season = %s", (terms["season"],))
         cap = cursor.fetchone()
     position = player["position"]
     current_depth = len(peers)
@@ -111,9 +113,16 @@ def analyze_signing(team_id, target_id, terms):
         _factor("offer", "报价与薪资", term, "offer_terms",
                 "当前报价存在需处理的规则或预算提示。" if checks else "当前报价有可核对的合同与预算数据。"),
     ]
+    blocked = bool(rules["errors"]) or len(roster)>=15 or bool(cap and rules.get("projected_payroll",0)>cap["luxury_tax_line"])
+    rating = rate_roster_change(
+        profiles[1:], [candidate], [], baseline[1], baseline[0],
+        salary_change=terms["year1_salary"],projected_payroll=rules.get("projected_payroll",0),
+        cap_amount=cap["cap_amount"] if cap else 0,tax_line=cap["luxury_tax_line"] if cap else 0,
+        years=terms["years"],valid=not blocked,
+    )
     return _result("signing", factors, checks, [
         display_profile(candidate, "拟签约"), *(display_profile(peer, "本队同位置") for peer in peers),
-    ], baseline)
+    ], baseline, rating)
 
 
 def analyze_trade(payload):
@@ -136,6 +145,8 @@ def analyze_trade(payload):
         outgoing = player_profiles(cursor, outgoing, payload["season"])
         incoming = player_profiles(cursor, incoming, payload["season"])
         baseline = team_priorities(cursor, team_id, payload["season"])
+        cursor.execute("SELECT cap_amount,luxury_tax_line FROM salary_caps WHERE season=%s",(payload["season"],))
+        cap = cursor.fetchone()
     valid = validation["is_valid"]
     before = Counter(player["position"] for player in roster)
     after = Counter(player["position"] for player in roster if player["id"] not in outgoing_ids)
@@ -155,7 +166,13 @@ def analyze_trade(payload):
     ]
     if not valid:
         factors.insert(0, _factor("rules", "交易需调整", "当前方案未通过系统交易校验。", "trade_rules", "存在交易规则阻碍。"))
+    rating = rate_roster_change(
+        roster,incoming,outgoing,baseline[1],baseline[0],
+        salary_change=payroll["incoming"]-payroll["outgoing"],
+        projected_payroll=cap["cap_amount"]-payroll["cap_space_after"] if cap else 0,
+        cap_amount=cap["cap_amount"] if cap else 0,tax_line=cap["luxury_tax_line"] if cap else 0,valid=valid,
+    )
     return _result("trade", factors, validation["reasons"], [
         *(display_profile(player, "拟换入") for player in incoming),
         *(display_profile(player, "拟换出") for player in outgoing),
-    ], baseline)
+    ], baseline, rating)

@@ -6,7 +6,7 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
         <h1 class="h3 mb-1">{{ filtered_team.name + '比赛记录' if filtered_team else '比赛记录' }}</h1>
-        <div class="text-secondary small">赛程状态与比分</div>
+        <div class="text-secondary small">当前比赛日 {{ business_date or '未设置' }} · 本日比赛优先，其次待开始，最后已完赛。</div>
     </div>
     {% if filtered_team %}
     <a class="btn btn-outline-secondary" href="{{ url_for('games', season=season, q=search or None) }}">查看全联盟赛程</a>
@@ -30,7 +30,7 @@
             <tbody>
                 {% for game in games %}
                 <tr>
-                    <td class="text-nowrap">{{ game.game_date }}</td>
+                    <td class="text-nowrap">{{ game.game_date }}{% if game.game_date == business_date %}<span class="badge text-bg-primary ms-1">本日</span>{% endif %}</td>
                     <td class="text-nowrap">{{ game.home_team_name }} ({{ game.home_team_abbr }})</td>
                     <td class="text-nowrap">{{ game.away_team_name }} ({{ game.away_team_abbr }})</td>
                     <td class="fw-semibold">{{ game.home_score }} : {{ game.away_score }}</td>

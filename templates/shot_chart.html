@@ -66,7 +66,7 @@
                     {% endfor %}
                 </div>
             </div>
-            <p class="small text-secondary mb-3">{% if mode == "volume" %}颜色越深，区域出手占比越高。{% else %}以同赛季联盟各区命中率为基准，双方各至少 10 次出手才标注差值。{% endif %}点分区查看记录。</p>
+            <p class="small text-secondary mb-3">{% if mode == "volume" %}颜色越深，区域出手占比越高。{% else %}以同赛季联盟各区命中率为基准，球员和联盟该区域都有出手就计算差值。{% endif %}点分区查看记录。</p>
             <svg class="shot-court" viewBox="0 0 500 430" role="group" aria-label="可点击的半场投篮分区">
                 {% for zone in zones|reverse %}
                     {% set band = zone.volume_band if mode == "volume" else zone.efficiency_band %}
@@ -86,7 +86,7 @@
                     <text x="{{ zone.text_x }}" y="{{ zone.text_y }}">
                         {% if mode == "volume" %}{{ pct(zone.share) if zone.attempts else "—" }}
                         {% elif zone.qualified %}{{ "%+.1f"|format(zone.diff) }}
-                        {% elif zone.attempts %}不足{% else %}—{% endif %}
+                        {% else %}—{% endif %}
                     </text>
                     {% endfor %}
                 </g>
@@ -95,7 +95,7 @@
                 {% if mode == "volume" %}
                 {% set labels = [('low', '低于 10%'), ('medium', '10% 至不足 25%'), ('high', '至少 25%')] %}
                 {% else %}
-                {% set labels = [('higher', '高至少 5 个百分点'), ('near', '相差不足 5 个百分点'), ('lower', '低至少 5 个百分点'), ('limited','样本不足')] %}
+                {% set labels = [('higher', '高至少 5 个百分点'), ('near', '相差不足 5 个百分点'), ('lower', '低至少 5 个百分点'), ('unavailable','联盟无出手记录')] %}
                 {% endif %}
                 {% for key, label in labels + [('empty','无出手')] %}<li><span class="shot-swatch tone-{{ key }}" aria-hidden="true"></span>{{ label }}</li>{% endfor %}
             </ul>
@@ -116,7 +116,7 @@
                         <td>{{ pct(zone.league_pct) if zone.league_attempts else "—" }}</td>
                         <td class="text-nowrap small">
                             {% if zone.qualified %}{{ "%+.1f"|format(zone.diff) }} 个百分点
-                            {% elif zone.attempts %}<span class="text-secondary">样本不足</span>
+                            {% elif zone.attempts %}<span class="text-secondary">无联盟基准</span>
                             {% else %}—{% endif %}
                         </td>
                     </tr>

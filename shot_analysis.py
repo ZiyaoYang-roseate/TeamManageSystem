@@ -1,7 +1,7 @@
 from db import fetch_all, fetch_one
 
 
-ZONE_MIN_ATTEMPTS = 10
+ZONE_MIN_ATTEMPTS = 1
 DETAIL_PAGE_SIZE = 20
 
 
@@ -31,7 +31,7 @@ def annotate_zones(zones):
         row["qualified"] = min(attempts, row["league_attempts"]) >= ZONE_MIN_ATTEMPTS
         difference = row["diff"]
         row["efficiency_band"] = (
-            "empty" if not attempts else "limited" if not row["qualified"]
+            "empty" if not attempts else "unavailable" if not row["qualified"]
             else "higher" if difference >= 5 else "lower" if difference <= -5 else "near"
         )
     return total

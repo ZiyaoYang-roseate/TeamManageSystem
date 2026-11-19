@@ -909,7 +909,7 @@ def update_clock(game_id, payload):
     }
 
 
-def finish_game(game_id):
+def finish_game(game_id, *, user_id=None, note="", check_date=True):
     with transaction() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -929,19 +929,29 @@ def finish_game(game_id):
                 raise ScorekeeperError("比赛不存在", 404)
             if game["status"] == "finished":
                 return {"message": "比赛已结束", "game": game, "already_finished": True}
-            _require_current_scorekeeper_date(game)
+            if check_date:
+                _require_current_scorekeeper_date(game)
             if game["status"] != "live":
                 raise ScorekeeperError("比赛尚未开始，不能结束比赛", 409)
             _require_initialized_starters(game)
-            if game["period"] < 4 or game["seconds_remaining"] != 0:
-                raise ScorekeeperError("第四节或当前加时赛时钟归零后才能结束比赛", 409)
             if game["home_score"] == game["away_score"]:
-                raise ScorekeeperError("当前比分相同，必须继续比赛直至决出胜负", 409)
+                raise ScorekeeperError("当前比分相同，需录入分出胜负的比分后才能完赛", 409)
 
             cursor.execute(
                 "UPDATE games SET status = 'finished' WHERE id = %s",
                 (game_id,),
             )
+            if user_id is not None and note and (not check_date or game["period"] < 4 or game["seconds_remaining"] != 0):
+                cursor.execute(
+                    """
+                    INSERT INTO league_game_reviews
+                        (game_id,status,finding,resolution,opened_by,resolved_by,resolved_at)
+                    VALUES (%s,'resolved',%s,%s,%s,%s,NOW())
+                    ON DUPLICATE KEY UPDATE resolution=VALUES(resolution),resolved_by=VALUES(resolved_by),
+                        status='resolved',resolved_at=NOW()
+                    """,
+                    (game_id, "按已录入比分完赛", note, user_id, user_id),
+                )
             cursor.execute(
                 """
                 SELECT id, status, home_score, away_score, period, seconds_remaining

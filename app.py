@@ -19,6 +19,8 @@ from flask import (
 )
 
 import scorekeeper
+from player_directory import LEADER_METRICS, directory_data, team_members
+from schedule_order import ordered_games
 import team_planning
 from analysis_routes import blueprint as analysis_blueprint
 from auth import (
@@ -33,7 +35,7 @@ from db import execute, fetch_all, fetch_one, transaction
 from demo_names import chinese_name, chinese_names_in_text
 from draft_profiles import EXTERNAL_LEVELS, PROFILE_FIELDS, external_profile, parse_profile_fields
 from game_analysis import ZONE_LABELS
-from player_profiles import compare_box_scores, player_comparison_sample, player_contract, player_performance
+from player_profiles import compare_box_scores, player_comparison_sample, player_contract, player_performance, player_career_teams
 from shot_analysis import DETAIL_PAGE_SIZE, annotate_zones, recent_shooting_games, zone_shots
 from decision_analysis import analyze_trade
 from constants import POSITIONS, SEASONS, SHOT_ZONES, SHOT_ZONE_GEOMETRY
@@ -97,8 +99,6 @@ def database_error(exc):
 
 
 MANAGEMENT_ENDPOINTS = {
-    "players",
-    "player_detail",
     "add_player",
     "edit_player",
     "delete_player",
@@ -905,8 +905,21 @@ def league_dashboard():
 def league_game(game_id):
     require_league_admin()
     if request.method == "POST":
-        action = choice(request.form.get("action"), "核查操作", ("open", "resolve"))
+        action = choice(request.form.get("action"), "比赛操作", ("finish", "open", "resolve"))
         note = request.form.get("note", "").strip()
+        if action == "finish":
+            if len(note) > 500:
+                raise BusinessError("完赛说明最多 500 字")
+            try:
+                scorekeeper.finish_game(
+                    game_id, user_id=g.user["id"], note=note or "后续无新增统计，按当前已录入比分完赛。",
+                    check_date=False,
+                )
+            except scorekeeper.ScorekeeperError as exc:
+                flash(exc.message, "warning")
+            else:
+                flash("比赛已完赛。当前比分和已录入统计已保留。", "success")
+            return redirect(url_for("league_game", game_id=game_id), code=303)
         if not 1 <= len(note) <= 500:
             raise BusinessError("请填写 1 至 500 字的核查说明")
         update_game_review(game_id, g.user["id"], action, note)
@@ -959,22 +972,18 @@ def league_draft_pool():
 @app.route("/analytics")
 def analytics():
     season = current_season()
-    page, per_page = pagination_args(20)
-    search = search_term()
-    players, total, page, total_pages = advanced_player_stats(
-        season, page, per_page, search
-    )
+    metric = request.args.get("metric", "points")
+    if metric not in LEADER_METRICS:
+        metric = "points"
+    mode = "total" if request.args.get("mode") == "total" else "average"
+    tab = "all" if request.args.get("tab") == "all" else "ranking"
+    page, per_page = pagination_args()
+    data = directory_data(season, metric, mode, tab, search_term(), page, per_page)
     return render_template(
-        "analytics.html",
-        players=players,
-        teams=advanced_team_stats(season),
-        season=season,
-        seasons=SEASONS,
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=total_pages,
-        search=search,
+        "analytics.html", season=season,seasons=SEASONS,metric=metric,mode=mode,tab=tab,
+        metrics=LEADER_METRICS,boards=data["boards"],players=data["rows"],total=data["total"],
+        page=data["page"],per_page=per_page,total_pages=data["total_pages"],offset=data["offset"],
+        search=search_term(),
     )
 
 
@@ -1111,8 +1120,9 @@ def scouting():
     raw_year = values.get("year")
     year = bounded_int(raw_year, "选秀年份", 2000, 2100) if raw_year else None
     comparison = None
+    recommendations = None
     if request.method == "POST":
-        action = choice(values.get("action"), "操作", ("save", "remove", "compare"))
+        action = choice(values.get("action"), "操作", ("save", "remove", "compare", "recommend"))
         if action in {"save", "remove"}:
             prospect_id = bounded_int(values.get("prospect_id"), "候选人")
             if action == "save":
@@ -1126,14 +1136,18 @@ def scouting():
                 team_planning.update_draft_board(team_id, year, prospect_id)
             flash("本队选秀板已更新", "success")
             return redirect(url_for("scouting", year=year, season=season), code=303)
-        raw_ids = values.getlist("candidate")
-        if not 2 <= len(raw_ids) <= 3:
-            raise BusinessError("请选择 2 至 3 名候选人")
-        selected = {bounded_int(value, "候选人") for value in raw_ids}
+        if action == "compare":
+            raw_ids = values.getlist("candidate")
+            if not 2 <= len(raw_ids) <= 3:
+                raise BusinessError("请选择 2 至 3 名候选人")
+            selected = {bounded_int(value, "候选人") for value in raw_ids}
     workspace = team_planning.draft_workspace(team_id, season, year)
     if request.method == "POST":
-        comparison = team_planning.draft_comparison(workspace, selected)
-    return render_template("scouting.html", workspace=workspace, comparison=comparison, season=season), {
+        if action == "recommend":
+            recommendations = team_planning.draft_recommendations(workspace)
+        else:
+            comparison = team_planning.draft_comparison(workspace, selected)
+    return render_template("scouting.html", workspace=workspace, comparison=comparison, recommendations=recommendations, season=season), {
         "Cache-Control": "private, no-store",
     }
 
@@ -1505,60 +1519,9 @@ def trade_machine():
 
 @app.route("/players")
 def players():
-    page, per_page = pagination_args()
-    search = search_term()
-    where_clause = ""
-    search_params = ()
-    if search:
-        like = f"%{search}%"
-        where_clause = """
-            WHERE p.name LIKE %s
-               OR p.position LIKE %s
-               OR p.nationality LIKE %s
-               OR CAST(p.jersey_number AS CHAR) LIKE %s
-               OR t.name LIKE %s
-               OR t.abbreviation LIKE %s
-               OR CAST(p.age AS CHAR) LIKE %s
-               OR CAST(p.height_cm AS CHAR) LIKE %s
-               OR CAST(p.weight_kg AS CHAR) LIKE %s
-               OR CAST(p.salary AS CHAR) LIKE %s
-        """
-        search_params = (like,) * 10
-
-    total = fetch_one(
-        f"""
-        SELECT COUNT(*) AS total
-        FROM players p
-        LEFT JOIN teams t ON t.id = p.team_id
-        {where_clause}
-        """,
-        search_params,
-    )["total"]
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = min(page, total_pages)
-    players = fetch_all(
-        f"""
-        SELECT p.*,
-               COALESCE(t.name, 'FREE') AS team_name,
-               COALESCE(t.abbreviation, 'FA') AS abbreviation
-        FROM players p
-        LEFT JOIN teams t ON t.id = p.team_id
-        {where_clause}
-        ORDER BY CASE WHEN p.team_id IS NULL THEN 1 ELSE 0 END, t.name, p.jersey_number
-        LIMIT %s OFFSET %s
-        """,
-        (*search_params, per_page, (page - 1) * per_page),
-    )
-    return render_template(
-        "players.html",
-        players=players,
-        season=current_season(),
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=total_pages,
-        search=search,
-    )
+    values = request.args.to_dict()
+    values["tab"] = "all"
+    return redirect(url_for("analytics", **values))
 
 
 @app.get("/players/<int:player_id>")
@@ -1578,8 +1541,9 @@ def player_detail(player_id):
     page, per_page = pagination_args()
     response = render_template(
         "player_detail.html", player=player, season=season, seasons=SEASONS, performance=performance,
+        career_teams=player_career_teams(player_id),
         zones=zones, shot_total=shot_total, favorite=favorite, contract=contract, show_contract=show_contract,
-        list_url=url_for("players", season=season, q=search_term() or None, page=page, per_page=per_page),
+        list_url=url_for("analytics", season=season, q=search_term() or None, page=page, per_page=per_page),
     )
     return response, {"Cache-Control": "private, no-store"}
 
@@ -1797,18 +1761,15 @@ def my_team():
     upcoming = [match for match in reversed(matches) if match["status"] == "scheduled"][:4]
     recent = [match for match in matches if match["status"] == "finished"][:5]
     live = [match for match in matches if match["status"] == "live"]
-    scoring_leaders = sorted(
-        (player for player in roster if player["ppg"] is not None),
-        key=lambda player: player["ppg"], reverse=True,
-    )[:5]
     trend = [
         {"date": match["game_date"].strftime("%m-%d"), "scored": match["team_score"], "allowed": match["opponent_score"]}
         for match in reversed(recent)
     ]
+    members = team_members(team_id, season)
     return render_template(
         "my_team.html", team=team, coach=coach, season=season, standings=standings,
-        roster_count=len(roster), cap=cap, payroll=payroll, cap_space=cap_space,
-        upcoming=upcoming, recent=recent, live=live, leaders=scoring_leaders, trend=trend,
+        roster_count=sum(not row.get("archived_at") for row in members if row["is_current"]), cap=cap, payroll=payroll, cap_space=cap_space,
+        upcoming=upcoming, recent=recent, live=live, members=members, trend=trend,
     ), {"Cache-Control": "no-store"}
 
 
@@ -1828,6 +1789,7 @@ def team_detail(team_id):
         cap_space=cap_space,
         season=season,
         recent_games=team_schedule(team_id, season),
+        members=team_members(team_id,season),
         signing_history=signing_history,
         trade_history=trade_history,
     )
@@ -1938,7 +1900,7 @@ def games():
     total = fetch_one(
         f"""
         SELECT COUNT(*) AS total
-        FROM games g
+        FROM games g LEFT JOIN scorekeeper_business_dates bd ON bd.season=g.season
         JOIN teams ht ON ht.id = g.home_team_id
         JOIN teams at ON at.id = g.away_team_id
         {where_clause}
@@ -1962,16 +1924,24 @@ def games():
             ht.abbreviation AS home_team_abbr,
             at.name AS away_team_name,
             at.abbreviation AS away_team_abbr
-        FROM games g
+        FROM games g LEFT JOIN scorekeeper_business_dates bd ON bd.season=g.season
         JOIN teams ht ON ht.id = g.home_team_id
         JOIN teams at ON at.id = g.away_team_id
         {where_clause}
-        ORDER BY g.game_date DESC, g.id DESC
+        ORDER BY CASE
+            WHEN g.game_date=bd.business_date AND g.status<>'cancelled' THEN 0
+            WHEN g.status IN ('scheduled','live') THEN 1
+            WHEN g.status='finished' THEN 2 ELSE 3 END,
+            CASE WHEN g.game_date=bd.business_date AND g.status<>'cancelled' THEN 0
+                 WHEN g.status IN ('scheduled','live') THEN TO_DAYS(g.game_date)
+                 ELSE -TO_DAYS(g.game_date) END,
+            CASE g.status WHEN 'live' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,g.id
         LIMIT %s OFFSET %s
         """,
         (*params, per_page, (page - 1) * per_page),
     )
     total_pages = (total + per_page - 1) // per_page
+    setting = fetch_one("SELECT business_date FROM scorekeeper_business_dates WHERE season=%s",(season,))
     return render_template(
         "games.html",
         games=games_data,
@@ -1982,7 +1952,7 @@ def games():
         season=season,
         seasons=SEASONS,
         search=search,
-        filtered_team=filtered_team,
+        filtered_team=filtered_team, business_date=setting["business_date"] if setting else None,
     )
 
 
@@ -2070,7 +2040,7 @@ def scorekeeper_calendar():
         )
     return render_template(
         "scorekeeper_calendar.html",
-        games=games_data,
+        games=ordered_games(games_data,business_date),
         season=season,
         seasons=SEASONS,
         business_date=business_date,
@@ -2218,7 +2188,7 @@ def scorekeeper_game_update(game_id):
 @app.route("/api/scorekeeper/game/<int:game_id>/end", methods=["POST"])
 def scorekeeper_game_end(game_id):
     try:
-        result = scorekeeper.finish_game(game_id)
+        result = scorekeeper.finish_game(game_id, user_id=g.user["id"], note="记分员按当前已录入比分确认完赛。")
     except scorekeeper.ScorekeeperError as exc:
         return jsonify({"error": exc.message}), exc.status_code
 

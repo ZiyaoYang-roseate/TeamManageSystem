@@ -6,7 +6,7 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
         <h1 class="h3 mb-1">计分员赛程日历</h1>
-        <div class="text-secondary small">{{ season }} 赛季比赛安排</div>
+        <div class="text-secondary small">{{ season }} 赛季 · 本日比赛优先，其次待开始，最后已完赛</div>
     </div>
     <div class="d-flex flex-wrap gap-2">
         {% if business_date %}
@@ -42,8 +42,10 @@
                     <td class="text-nowrap">{{ game.away_team_name }} ({{ game.away_team_abbr }})</td>
                     <td class="fw-semibold">{{ game.home_score }} : {{ game.away_score }}</td>
                     <td>
-                        {% if game.status == 'finished' or game.date_relation == 'past' %}
+                        {% if game.status == 'finished' %}
                         <span class="badge text-bg-secondary">已结束</span>
+                        {% elif game.date_relation == 'past' %}
+                        <span class="badge text-bg-warning">{{ '往日进行中 · 待处理' if game.status=='live' else '往日未开赛 · 待处理' }}</span>
                         {% elif game.date_relation == 'future' %}
                         <span class="badge text-bg-light border">未到比赛日</span>
                         {% elif game.status == 'live' %}
@@ -53,7 +55,7 @@
                         {% endif %}
                     </td>
                     <td class="text-end">
-                        {% if game.date_relation == 'future' %}
+                        {% if game.date_relation == 'future' and game.status != 'finished' %}
                         <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="未来比赛不能提前计分">
                             <i class="bi bi-lock me-1"></i>未到比赛日
                         </button>
