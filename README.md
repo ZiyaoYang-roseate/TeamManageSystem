@@ -11,66 +11,148 @@
 - **补强方案有可解释的评级。** 手动签约和交易分析、智能辅助方案及交易加签约组合，均按本队情况显示 S、A、B、C、D、E 等级与分数。赛场补强占 60%、轮换适配占 25%、薪资成本占 15%，并列出历史表现、未来职责、位置变化和预算依据。S≥90、A≥80、B≥65、C≥50、D≥35，其余为 E；样本不足、位置空缺和规则阻碍可限制评级。评级用于比较未来补强价值，不代表胜率或加盟后的统计预测。
 - **AI 可选，操作有明确的确认流程。** 可接入 DeepSeek 来整理比赛建议和球队决策，未配置模型也能用规则生成报告和方案。签约、发送交易申请、接受交易都要由相应管理层确认，服务端会重新校验。
 
-## 在另一台电脑上初始化并运行
+## 首次在本机安装：数据库、账号和启动
 
-以下以 Windows 和 PowerShell 7 为例。先安装 Git、Python 3.12 和 MySQL Server 8.0，确认 MySQL 服务已启动，记住安装时为 MySQL 管理账号设置的密码。**MySQL 密码用于连接数据库，网页登录密码在第三步单独创建。**
+下面的流程适用于另一台 Windows 电脑，也适用于第一次在本机安装。命令兼容 **Windows PowerShell 5.1 和 PowerShell 7**。请在同一个 PowerShell 窗口依次执行，命令前的说明和输出示例不需要输入。
 
-### 1. 下载代码并安装依赖
+需要先安装：
 
-任选一个仓库克隆。如果是下载 ZIP，解压后直接在项目目录打开 PowerShell，执行安装依赖的部分。
+- **Python 3.12**：安装时勾选加入 PATH；用 `py -3.12 --version` 检查。
+- **MySQL Server 8.0**：需要实际安装数据库服务，只有 Workbench 客户端不能运行数据库。安装时记住 `root` 密码，确认 MySQL 服务正在运行。
+- **Git**：用于克隆代码；也可以下载仓库 ZIP 并解压。
+
+本系统有两套独立的凭据：**MySQL 的账号密码用于程序连接数据库；联赛管理员、管理层和记分员的账号密码用于网页登录。** 下文新建的网页演示账号密码是 `123456`，它不是 MySQL 的 `root` 密码。
+
+### 1. 下载项目并安装 Python 依赖
+
+任选一个仓库下载。两条克隆命令只执行一条：
 
 ```powershell
 # GitHub
 git clone https://github.com/ZiyaoYang-roseate/TeamManageSystem.git
 
-# 或者从 Gitee 下载（与上一条二选一）
+# 或 Gitee
 git clone https://gitee.com/roseate/team-manage-system.git TeamManageSystem
+```
 
+进入项目目录并安装依赖。如果下载的是 ZIP，先在解压后的项目目录打开 PowerShell，跳过 `cd` 这一行。
+
+```powershell
 cd TeamManageSystem
 py -3.12 -m venv .venv-windows
 $python = ".venv-windows/Scripts/python.exe"
 & $python -m pip install -r requirements.txt
 ```
 
-### 2. 创建本机演示数据库
+后续使用 `& $python` 运行命令，确保安装依赖和运行网站使用同一个 Python 环境。
 
-在同一窗口运行以下命令，密码输入时不会明文显示。默认 MySQL 管理账号为 `root`；如果你用其他有权在目标库建表、改表和写入数据的账号，请替换 `MYSQL_USER`。
+### 2. 连接本机 MySQL
+
+在同一个窗口设置连接信息。以下使用本机安装的 MySQL 管理账号 `root`；如果安装时使用了其他账号或端口，请按实际情况替换。
 
 ```powershell
 $env:MYSQL_HOST = "127.0.0.1"
 $env:MYSQL_PORT = "3306"
 $env:MYSQL_USER = "root"
-$env:MYSQL_PASSWORD = Read-Host "本机 MySQL 密码" -MaskInput
+$mysqlCredential = Read-Host "请输入本机 MySQL 的 root 密码" -AsSecureString
+$env:MYSQL_PASSWORD = [System.Net.NetworkCredential]::new("", $mysqlCredential).Password
 $env:MYSQL_DATABASE = "nba_management_demo"
+```
 
+- `MYSQL_HOST` 是数据库所在电脑；本机使用 `127.0.0.1`。
+- `MYSQL_PORT` 是 MySQL 服务端口，默认 `3306`。
+- `MYSQL_USER`、`MYSQL_PASSWORD` 是安装 MySQL 时创建的数据库账号密码。
+- `MYSQL_DATABASE` 是本项目的数据存放位置。下面的演示初始化要求库名以 `_demo` 结尾，脚本可以自动创建它，无需手工导入 SQL。
+
+可以在 MySQL Workbench 用相同的主机、端口、用户名和密码测试连接。若服务未启动，在 Windows「服务」中启动对应的 MySQL 服务。项目直接读取上述环境变量，**不会自动加载 `.env` 文件**。这些变量只在当前 PowerShell 窗口内有效，关闭窗口后下次需重新设置。
+
+### 3. 初始化本地数据库
+
+第一次安装时运行：
+
+```powershell
 & $python init_db.py --reset-demo
 ```
 
-出现「演示库重建完成」和「已对账完赛: 135」即表示成功。脚本会创建数据库，写入 30 支球队、270 场赛程以及模拟球员和新秀。135 场完赛的比分、球员得分和逐次投篮来自同一套模拟事件，导入后会自动核对。
+该命令自动创建目标数据库、创建业务表、写入模拟数据并执行迁移。出现「演示库重建完成」和「已对账完赛: 135」表示成功。全新演示库包含 30 支球队、270 场赛程、135 场已完赛的技术统计与逐回合，以及合同、自由球员和选秀候选资料；完赛比分与相关事件会自动核对。
 
-**仅首次在空库上执行，或确实要清空演示进度时执行。** 重跑会清除目标演示库中的项目表及其中的网页登录账号。脚本要求库名以 `_demo` 结尾。希望从空库开始录入时，可以设置一个新的库名，再运行 `& $python migrate_db.py --create-database`，之后创建联赛管理员账号，由管理员维护球队和球员档案。
+**这个命令会重建目标演示库并清除原有比赛进度和网页登录账号。仅首次安装或明确需要重置演示进度时运行。** 日常打开网站不需要再次执行。
 
-### 3. 创建三个角色的网页登录账号
+### 4. 初始化三个角色及所有球队的账号密码
 
-初始化只生成演示业务数据。下面创建四个账号，分别覆盖三种角色和两支球队。密码按提示输入两次，至少 12 个字符。用户名可改成自己的，演示库没有默认网页登录密码。
+数据库初始化完成后运行：
 
 ```powershell
-& $python manage_users.py league_admin --role league_admin
-& $python manage_users.py demo_gm_lal --role management --team 1
-& $python manage_users.py demo_gm_por --role management --team 27
-& $python manage_users.py demo_scorer --role scorekeeper
+& $python init_demo_accounts.py --create-missing
 ```
 
-新建的演示库中，`1` 是湖人，`27` 是开拓者。要给其他球队创建账号，可在 MySQL Workbench 选中目标库后查询 `SELECT id, abbreviation, name FROM teams ORDER BY id;`，再把球队 ID 填到 `--team`。每支球队关联一个管理账号。忘记密码时，用 `& $python manage_users.py demo_scorer --reset-password` 重置对应账号。
+在刚创建的 30 队演示库中，此命令创建 **32 个网页登录账号**，并在终端逐条列出角色、球队、用户名和初始化结果：
 
-### 4. 启动并登录
+- 联赛管理员：用户名 `league_admin`，密码 `123456`，登录时选择「联赛管理员」。
+- 记分员：用户名 `scorekeeper`，密码 `123456`，登录时选择「记分员登录」。
+- 球队管理层：每支球队一个账号，用户名为 `gm_` 加球队英文缩写的小写，密码 `123456`，登录时选择「管理层登录」。
+- 例如湖人是 `gm_lal`，开拓者是 `gm_por`，凯尔特人是 `gm_bos`。完整名单以命令输出为准。
+
+每个管理层账号绑定自己的球队。**重复执行只补建缺失账号，不重置已有账号的密码，也不替换已有球队账号。** 如果输出为「保留」，请使用该账号原来的密码，不能假定也是 `123456`。没有球队数据时只会创建联赛管理员和记分员，新增球队后可再次运行以补齐管理账号。
+
+`123456` 是本地课程演示的初始密码。此初始化脚本仅允许连接本机、且库名以 `_demo` 结尾的数据库，数据库保存的是密码哈希。若使用非演示业务库，或需要自行指定用户名和密码，请使用手动管理命令：
+
+```powershell
+# 创建联赛管理员或记分员，随后按提示输入并确认密码
+& $python manage_users.py my_admin --role league_admin
+& $python manage_users.py my_scorer --role scorekeeper
+
+# 为球队 ID 为 1 的球队创建管理层；该球队不能已经绑定其他管理账号
+& $python manage_users.py my_gm --role management --team 1
+
+# 忘记密码时重置单个账号，随后按提示输入新密码
+& $python manage_users.py gm_lal --reset-password
+```
+
+手动管理命令要求密码至少 12 个字符；它与本地演示初始化的固定密码规则不同。球队 ID 可在目标数据库查询 `SELECT id, abbreviation, name FROM teams ORDER BY id;`。
+
+### 5. 启动网站并登录
+
+仍在前面配置过数据库连接的 PowerShell 窗口执行：
 
 ```powershell
 $env:FLASK_SECRET_KEY = & $python -c "import secrets; print(secrets.token_hex(32))"
 .\active.ps1 -Python $python
 ```
 
-浏览器打开 [http://127.0.0.1:5000](http://127.0.0.1:5000)，先选择匹配账号的角色，再输入用户名和密码。此地址仅供运行服务的电脑访问；想在另一台电脑上测试，就在那台电脑上重复以上步骤。按 `Ctrl+C` 停止。下次启动时重新设置数据库连接或复用原窗口，再执行启动命令，无需重建或创建账号。日常可沿用同一个会话密钥；换密钥后需要重新登录。长期运行请使用仅有业务库所需读写权限的 MySQL 账号，安装用的管理员账号留给初始化和迁移。
+看到服务监听地址后，浏览器打开 [http://127.0.0.1:5000](http://127.0.0.1:5000)。先选择账号对应角色，再输入第四步初始化的用户名和密码。可分别使用不同浏览器或隐私窗口同时演示三个角色，避免同一浏览器的登录会话互相覆盖。
+
+`FLASK_SECRET_KEY` 用于网页登录会话，与 MySQL 密码和网页登录密码都不同；换一个密钥后需要重新登录。`active.ps1` 只启动 Web 应用，不执行数据库重建。服务窗口需保持打开，按 `Ctrl+C` 停止。当前地址仅供运行服务的电脑访问，在其他电脑测试时可以按本文自建数据库并启动。
+
+### 6. 下次快速启动，保留已有数据
+
+如果原 PowerShell 窗口仍在，直接执行 `.\active.ps1 -Python $python` 即可。如果已经关闭窗口，在项目目录打开新窗口，重新设置连接和会话密钥后启动：
+
+```powershell
+$python = ".venv-windows/Scripts/python.exe"
+$env:MYSQL_HOST = "127.0.0.1"
+$env:MYSQL_PORT = "3306"
+$env:MYSQL_USER = "root"
+$mysqlCredential = Read-Host "请输入本机 MySQL 的 root 密码" -AsSecureString
+$env:MYSQL_PASSWORD = [System.Net.NetworkCredential]::new("", $mysqlCredential).Password
+$env:MYSQL_DATABASE = "nba_management_demo"
+$env:FLASK_SECRET_KEY = & $python -c "import secrets; print(secrets.token_hex(32))"
+.\active.ps1 -Python $python
+```
+
+不要重跑 `init_db.py --reset-demo`，这样会保留现有账号、比赛、合同和分析记录。更新代码后如需升级表结构，使用文末「升级已有业务数据库」的流程。
+
+### 可选：使用没有模拟业务数据的空库
+
+设置第二步的连接信息，将库名改成一个新的名称，然后执行：
+
+```powershell
+$env:MYSQL_DATABASE = "nba_management_local"
+& $python migrate_db.py --create-database
+& $python manage_users.py league_admin --role league_admin
+```
+
+这里仅创建结构，**不会生成球队、赛程或默认账号密码**。按提示设置管理员密码，启动后由管理员维护球队和球员，再按球队 ID 创建管理账号，另行创建记分员。需要完整的课程演示流程时优先使用前面的模拟数据方案。
 
 ## 球队管理层：备赛、复盘和管理阵容
 
@@ -118,7 +200,7 @@ $env:FLASK_SECRET_KEY = & $python -c "import secrets; print(secrets.token_hex(32
 ```powershell
 $env:NBA_AI_PROVIDER = "deepseek"
 $env:NBA_AI_MODEL = "deepseek-flash"
-$env:DEEPSEEK_API_KEY = Read-Host "DeepSeek API Key" -MaskInput
+$env:DEEPSEEK_API_KEY = [System.Net.NetworkCredential]::new("", (Read-Host "DeepSeek API Key" -AsSecureString)).Password
 .\active.ps1 -Python $python
 ```
 
@@ -157,4 +239,4 @@ Remove-Item Env:NBA_RUN_MYSQL_TESTS
 
 测试会在该演示库写入账号、比赛事件、交易和归档记录。GitHub Actions 使用单独的 MySQL 服务执行同一用例。
 
-项目入口：[启动脚本](active.ps1) · [演示库初始化](init_db.py) · [数据库结构](schema.sql) · [数据库迁移](migrate_db.py) · [账号管理](manage_users.py) · [自动测试](tests/)
+项目入口：[启动脚本](active.ps1) · [演示库初始化](init_db.py) · [数据库结构](schema.sql) · [数据库迁移](migrate_db.py) · [演示账号初始化](init_demo_accounts.py) · [账号管理](manage_users.py) · [自动测试](tests/)
