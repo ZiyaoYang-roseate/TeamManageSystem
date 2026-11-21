@@ -10,3 +10,9 @@ __pycache__/
 .env
 .env.*
 *.local.ps1
+
+# local tooling output
+/_shots/
+/_server.out.log
+/_server.err.log
+/*.zip

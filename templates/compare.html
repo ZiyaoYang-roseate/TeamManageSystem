@@ -5,10 +5,10 @@
 {% macro gap(value, pct=false) %}{% if value is none %}—{% elif value == 0 %}持平{% else %}{{ "%+.1f" | format(value) }}{{ " 个百分点" if pct else "" }}{% endif %}{% endmacro %}
 {% macro shot(row, total) %}
 {% if row.attempts %}
-<div class="fw-semibold">{{ stat(row.player_pct, true) }} <span class="small fw-normal text-secondary">{{ row.made }}/{{ row.attempts }}</span></div>
+<div class="fw-semibold">{{ stat(row.player_pct, true) }} <span class="u-caps fw-normal">{{ row.made }}/{{ row.attempts }}</span></div>
 <div class="compare-shot-track" aria-hidden="true"><span style="width: {{ (100 * row.attempts / total) | round(1) }}%"></span></div>
-<div class="small text-secondary">{{ (100 * row.attempts / total) | round(1) }}% 出手占比{% if row.attempts < 10 %} · 小样本{% endif %}</div>
-{% else %}<span class="small text-secondary">无出手记录</span>{% endif %}
+<div class="u-caps">{{ (100 * row.attempts / total) | round(1) }}% 出手占比{% if row.attempts < 10 %} · 小样本{% endif %}</div>
+{% else %}<span class="u-caps">无出手记录</span>{% endif %}
 {% endmacro %}
 <link rel="stylesheet" href="{{ url_for('static', filename='player-compare.css') }}">
 
@@ -32,7 +32,7 @@
                     <option value="{{ player.id }}"{% if selected and selected.id == player.id %} selected{% endif %}>{{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }}) · {{ player.position }}</option>
                     {% endfor %}
                 </select>
-                <div class="small text-secondary mt-1" data-option-status="{{ name }}" aria-live="polite"></div>
+                <div class="u-caps mt-1" data-option-status="{{ name }}" aria-live="polite"></div>
             </div>
             {% endfor %}
             <div class="col-md-2">
@@ -67,11 +67,11 @@
                     <a class="link-body-emphasis" href="{{ url_for('player_detail', player_id=player.id, season=season) }}">{{ player.name }}</a>
                     {% else %}{{ player.name }}{% endif %}
                 </h2>
-                <div class="small text-secondary">{{ player.team_name }} · {{ player.position }} · {{ player.age }} 岁</div>
+                <div class="u-caps">{{ player.team_name }} · {{ player.position }} · {{ player.age }} 岁</div>
                 {% if side.summary %}
                 <div class="small mt-2">{{ side.summary.games }} 场 · 场均 {{ stat(side.summary.minutes) }} 分钟 · 总计 {{ stat(side.summary.total_minutes) }} 分钟</div>
                 {% else %}
-                <div class="small mt-2 text-secondary">{{ season }} 赛季暂无出场记录</div>
+                <div class="u-caps mt-2">{{ season }} 赛季暂无出场记录</div>
                 {% endif %}
             </div>
         </article>
@@ -101,9 +101,9 @@
                     </div>
                 </div>
                 {% if not comparable %}
-                <p class="small text-secondary">任一球员少于 3 场或 60 分钟时保留原数据，样本足够后才显示差值和比较提示。</p>
+                <p class="u-caps">任一球员少于 3 场或 60 分钟时保留原数据，样本足够后才显示差值和比较提示。</p>
                 {% elif player1.position != player2.position %}
-                <p class="small text-secondary">两人登记位置不同。请结合轮换角色解读差异。</p>
+                <p class="u-caps">两人登记位置不同。请结合轮换角色解读差异。</p>
                 {% endif %}
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
@@ -120,7 +120,7 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="small text-secondary mt-2 mb-0">统计范围为所选赛季已完赛的出场记录。命中率按总出手计算，每 36 分钟口径按总出场时间折算。</p>
+                <p class="u-caps mt-2 mb-0">统计范围为所选赛季已完赛的出场记录。命中率按总出手计算，每 36 分钟口径按总出场时间折算。</p>
             </div>
         </section>
 
@@ -129,7 +129,7 @@
                 <h2 id="compare-recent-title" class="h5 mb-3">近况</h2>
                 {% for side in sides %}
                 <section class="compare-recent">
-                    <h3 class="h6">{{ side.player.name }}{% if side.recent %} <span class="small text-secondary fw-normal">近 {{ side.recent.games }} 场</span>{% endif %}</h3>
+                    <h3 class="h6">{{ side.player.name }}{% if side.recent %} <span class="u-caps fw-normal">近 {{ side.recent.games }} 场</span>{% endif %}</h3>
                     {% if side.recent %}
                     <dl class="compare-recent-stats mb-1">
                         <div><dt>得分</dt><dd>{{ stat(side.recent.points) }}</dd></div>
@@ -137,12 +137,12 @@
                         <div><dt>助攻</dt><dd>{{ stat(side.recent.assists) }}</dd></div>
                     </dl>
                     {% if side.summary.games == side.recent.games %}
-                    <div class="small text-secondary">这几场已覆盖当前赛季样本。</div>
+                    <div class="u-caps">这几场已覆盖当前赛季样本。</div>
                     {% else %}
-                    <div class="small text-secondary">赛季场均 {{ stat(side.summary.points) }} 分、{{ stat(side.summary.rebounds) }} 篮板、{{ stat(side.summary.assists) }} 助攻。</div>
+                    <div class="u-caps">赛季场均 {{ stat(side.summary.points) }} 分、{{ stat(side.summary.rebounds) }} 篮板、{{ stat(side.summary.assists) }} 助攻。</div>
                     {% endif %}
                     {% else %}
-                    <p class="small text-secondary mb-0">该赛季暂无比赛可比较。</p>
+                    <p class="u-caps mb-0">该赛季暂无比赛可比较。</p>
                     {% endif %}
                 </section>
                 {% endfor %}
@@ -153,17 +153,17 @@
     <section class="compare-panel mb-4" aria-labelledby="compare-shots-title">
         <h2 id="compare-shots-title" class="h5 mb-2">投篮选择与效率</h2>
         {% if sides[0].attempts or sides[1].attempts %}
-        <p class="small text-secondary">条形显示区域出手占比；命中率差只在双方该区域各有至少 10 次出手时显示。</p>
+        <p class="u-caps">条形显示区域出手占比；命中率差只在双方该区域各有至少 10 次出手时显示。</p>
         <div class="table-responsive">
             <table class="table align-middle compare-shot-table mb-0">
-                <thead><tr><th scope="col">区域</th><th scope="col">{{ player1.name }} <span class="small text-secondary">{{ sides[0].attempts }} 次</span></th><th scope="col">{{ player2.name }} <span class="small text-secondary">{{ sides[1].attempts }} 次</span></th><th scope="col">A − B 命中率</th></tr></thead>
+                <thead><tr><th scope="col">区域</th><th scope="col">{{ player1.name }} <span class="u-caps">{{ sides[0].attempts }} 次</span></th><th scope="col">{{ player2.name }} <span class="u-caps">{{ sides[1].attempts }} 次</span></th><th scope="col">A − B 命中率</th></tr></thead>
                 <tbody>
                 {% for zone in zones %}
                 <tr>
                     <th scope="row">{{ zone.label }}</th>
                     <td data-side="A">{{ shot(zone.first, sides[0].attempts) }}</td>
                     <td data-side="B">{{ shot(zone.second, sides[1].attempts) }}</td>
-                    <td class="small text-secondary text-nowrap">{{ gap(zone.difference, true) }}</td>
+                    <td class="u-caps text-nowrap">{{ gap(zone.difference, true) }}</td>
                 </tr>
                 {% endfor %}
                 </tbody>

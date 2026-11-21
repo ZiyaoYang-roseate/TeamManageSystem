@@ -2,36 +2,46 @@
 {% set args = request.args.to_dict() %}
 {% set _ = args.pop('page', None) %}
 {% set query = args | urlencode if args else '' %}
-<nav class="d-flex justify-content-between align-items-center mt-3" aria-label="分页">
-    <span class="text-secondary small">共 {{ total }} 条，第 {{ page }} / {{ total_pages }} 页</span>
-    <ul class="pagination pagination-sm mb-0">
-        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-            <a class="page-link" href="?page=1{% if query %}&{{ query }}{% endif %}" aria-label="首页">首页</a>
-        </li>
-        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-            <a class="page-link" href="?page={{ page - 1 }}{% if query %}&{{ query }}{% endif %}" aria-label="上一页">上一页</a>
-        </li>
+<nav class="pager" aria-label="分页">
+  <span class="pager-info">
+    共 {{ total }} 条 <span class="dot"></span> 第 {{ page }} / {{ total_pages }} 页
+  </span>
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+      <a class="page-link" href="?page={{ page - 1 }}{% if query %}&{{ query }}{% endif %}" aria-label="上一页">
+        <i class="bi bi-chevron-left"></i>
+      </a>
+    </li>
 
-        {% set start_page = [1, page - 2] | max %}
-        {% set end_page = [total_pages, page + 2] | min %}
-        {% if start_page > 1 %}
-        <li class="page-item disabled"><span class="page-link">…</span></li>
-        {% endif %}
-        {% for page_number in range(start_page, end_page + 1) %}
-        <li class="page-item {% if page_number == page %}active{% endif %}">
-            <a class="page-link" href="?page={{ page_number }}{% if query %}&{{ query }}{% endif %}">{{ page_number }}</a>
-        </li>
-        {% endfor %}
-        {% if end_page < total_pages %}
-        <li class="page-item disabled"><span class="page-link">…</span></li>
-        {% endif %}
+    {% set start_page = [1, page - 2] | max %}
+    {% set end_page = [total_pages, page + 2] | min %}
+    {% if start_page > 1 %}
+    <li class="page-item">
+      <a class="page-link" href="?page=1{% if query %}&{{ query }}{% endif %}">1</a>
+    </li>
+    {% if start_page > 2 %}
+    <li class="page-item disabled"><span class="page-link page-gap">…</span></li>
+    {% endif %}
+    {% endif %}
+    {% for page_number in range(start_page, end_page + 1) %}
+    <li class="page-item {% if page_number == page %}active{% endif %}">
+      <a class="page-link" href="?page={{ page_number }}{% if query %}&{{ query }}{% endif %}">{{ page_number }}</a>
+    </li>
+    {% endfor %}
+    {% if end_page < total_pages %}
+    {% if end_page < total_pages - 1 %}
+    <li class="page-item disabled"><span class="page-link page-gap">…</span></li>
+    {% endif %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ total_pages }}{% if query %}&{{ query }}{% endif %}">{{ total_pages }}</a>
+    </li>
+    {% endif %}
 
-        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
-            <a class="page-link" href="?page={{ page + 1 }}{% if query %}&{{ query }}{% endif %}" aria-label="下一页">下一页</a>
-        </li>
-        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
-            <a class="page-link" href="?page={{ total_pages }}{% if query %}&{{ query }}{% endif %}" aria-label="末页">末页</a>
-        </li>
-    </ul>
+    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+      <a class="page-link" href="?page={{ page + 1 }}{% if query %}&{{ query }}{% endif %}" aria-label="下一页">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+    </li>
+  </ul>
 </nav>
 {% endif %}

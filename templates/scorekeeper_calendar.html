@@ -5,8 +5,8 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
-        <h1 class="h3 mb-1">计分员赛程日历</h1>
-        <div class="text-secondary small">{{ season }} 赛季 · 本日比赛优先，其次待开始，最后已完赛</div>
+        <h1 class="page-title mb-1">计分员赛程日历</h1>
+        <div class="u-caps">{{ season }} 赛季 · 本日比赛优先，其次待开始，最后已完赛</div>
     </div>
     <div class="d-flex flex-wrap gap-2">
         {% if business_date %}
@@ -18,13 +18,13 @@
 </div>
 
 {% if business_date %}
-<p class="text-secondary small">仅当前比赛日可计分。比赛日由联赛运营管理员推进。更新时间：{{ business_date_updated_at }}</p>
+<p class="u-caps">仅当前比赛日可计分。比赛日由联赛运营管理员推进。更新时间：{{ business_date_updated_at }}</p>
 {% endif %}
 
-<div class="card shadow-sm">
+<div class="panel">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead class="table-dark">
+            <thead class="">
                 <tr>
                     <th scope="col">日期</th>
                     <th scope="col">主队</th>

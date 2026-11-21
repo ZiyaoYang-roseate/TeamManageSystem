@@ -1,109 +1,131 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
 {% block title %}薪资与阵容规划{% endblock %}
 {% block content %}
 {% macro money(value) %}${{ "{:,}".format(value) }}{% endmacro %}
-<header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+{% call ui.page_head('Cap sheet · ' ~ season, '薪资与阵容规划', team.city ~ team.name ~ ' · ' ~ ('只读查看（联赛管理员）' if readonly else '本队工作区')) %}
+  {% if readonly and teams %}
+  <form method="get" class="d-flex gap-2 align-items-end">
+    <input type="hidden" name="season" value="{{ season }}">
     <div>
-        <h1 class="h3 mb-1">薪资与阵容规划</h1>
-        <span class="text-secondary">{{ team.name }} · 本队工作区</span>
-    </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-primary" href="{{ url_for('free_agency', season=season) }}">比较签约预算</a>
-        <a class="btn btn-outline-primary" href="{{ url_for('trade_machine', season=season) }}">比较交易预算</a>
-    </div>
-</header>
-
-<section id="packages" class="border-top pt-3 mb-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <div>
-            <h2 class="h5 mb-1">组合补强</h2>
-            <p class="small text-secondary mb-0">先用交易调整轮换，再用交易后预算拟一份自由市场合同。</p>
-        </div>
-        <form method="post" action="{{ url_for('salary', season=season) }}#packages">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-primary">生成组合方案</button>
-        </form>
-    </div>
-    {% if recommendations %}
-        {% if recommendations.plans %}
-        <p class="small text-secondary">{{ "AI 整理" if recommendations.source == "model" else "规则整理" }} · 本队对照样本 {{ recommendations.team_sample }} 场。{{ recommendations.needs | join(' ') }}</p>
-        {% endif %}
-        {% for plan in recommendations.plans %}
-        <article class="card card-body mb-3">
-            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                <div>
-                    <h3 class="h6 mb-1">{{ plan.title }}</h3>
-                    <div class="small text-secondary">{{ plan.opponent }}</div>
-                    <div><strong>交易后</strong> {{ plan.subtitle }}</div>
-                </div>
-                <form method="post" action="{{ url_for('apply_roster_package') }}" onsubmit="return confirm('确认发送交易申请？对方同意后，由你确认后续签约。');">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="token" value="{{ plan.token }}">
-                    <button class="btn btn-outline-primary">应用并发送交易</button>
-                </form>
-            </div>
-            {% include "roster_rating.html" %}
-            <ul class="small mt-3">
-                <li><strong>比赛用法</strong> {{ plan.value.summary }}。{{ plan.value.usage }}</li>
-                <li><strong>数据与取舍</strong> {{ plan.value.court }} {{ plan.value.tradeoff }}</li>
-                <li><strong>后续签约</strong> {{ plan.signing_notes | join(' ') }}</li>
-                <li><strong>验证</strong> {{ plan.value.verify }}</li>
-            </ul>
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead><tr><th>赛季</th><th>维持现状</th><th>仅交易后</th><th>交易并签约</th><th>组合完成后距税线</th><th>组合后有合同的位置</th></tr></thead>
-                    <tbody>
-                        {% for row in plan.budget %}
-                        <tr><th scope="row">{{ row.season }}</th><td>{{ money(row.current.payroll) }}</td><td>{{ money(row.alternate.payroll) }}</td>
-                            <td>{{ money(row.projected.payroll) }}</td><td>{{ money(row.cap.luxury_tax_line - row.projected.payroll) if row.cap else "未公布" }}</td>
-                            <td>{% for position, total in row.projected.depth | dictsort %}{{ position }} {{ total }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </article>
-        {% else %}
-        <p class="text-secondary mb-0">{{ recommendations.message }}</p>
+      <label class="form-label mb-1" for="salaryTeam">查看球队</label>
+      <select class="form-select form-select-sm" name="team_id" id="salaryTeam" onchange="this.form.submit()">
+        {% for item in teams %}
+        <option value="{{ item.id }}"{% if item.id == team.id %} selected{% endif %}>{{ item.city }}{{ item.name }}</option>
         {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm">切换</button>
+  </form>
+  {% endif %}
+  {% if not readonly %}
+  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('free_agency', season=season) }}">比较签约预算</a>
+  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('trade_machine', season=season) }}">比较交易预算</a>
+  {% endif %}
+{% endcall %}
+
+<section id="packages" class="panel mb-4">
+  {% call ui.panel_head('组合补强', '先用交易调整轮换，再用交易后预算拟一份自由市场合同。') %}
+    {% if not readonly %}
+    <form method="post" action="{{ url_for('salary', season=season) }}#packages">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary btn-sm">生成组合方案</button>
+    </form>
     {% endif %}
+  {% endcall %}
+  <div class="panel-body">
+    {% if recommendations %}
+      {% if recommendations.plans %}
+      <p class="u-caps">{{ "AI 整理" if recommendations.source == "model" else "规则整理" }} · 本队对照样本 {{ recommendations.team_sample }} 场。{{ recommendations.needs | join(' ') }}</p>
+      {% endif %}
+      {% for plan in recommendations.plans %}
+      <article class="panel panel-body mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <h3 class="h6 mb-1">{{ plan.title }}</h3>
+            <div class="u-caps">{{ plan.opponent }}</div>
+            <div><strong>交易后</strong> {{ plan.subtitle }}</div>
+          </div>
+          {% if not readonly %}
+          <form method="post" action="{{ url_for('apply_roster_package') }}" onsubmit="return confirm('确认发送交易申请？对方同意后，由你确认后续签约。');">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="token" value="{{ plan.token }}">
+            <button class="btn btn-outline-primary btn-sm">应用并发送交易</button>
+          </form>
+          {% endif %}
+        </div>
+        {% include "roster_rating.html" %}
+        <ul class="small mt-3">
+          <li><strong>比赛用法</strong> {{ plan.value.summary }}。{{ plan.value.usage }}</li>
+          <li><strong>数据与取舍</strong> {{ plan.value.court }} {{ plan.value.tradeoff }}</li>
+          <li><strong>后续签约</strong> {{ plan.signing_notes | join(' ') }}</li>
+          <li><strong>验证</strong> {{ plan.value.verify }}</li>
+        </ul>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>赛季</th><th class="num">维持现状</th><th class="num">仅交易后</th><th class="num">交易并签约</th><th class="num">组合完成后距税线</th><th>组合后有合同的位置</th></tr></thead>
+            <tbody>
+              {% for row in plan.budget %}
+              <tr><th scope="row" class="mono-num">{{ row.season }}</th><td class="num">{{ money(row.current.payroll) }}</td><td class="num">{{ money(row.alternate.payroll) }}</td>
+                  <td class="num">{{ money(row.projected.payroll) }}</td><td class="num">{{ money(row.cap.luxury_tax_line - row.projected.payroll) if row.cap else "未公布" }}</td>
+                  <td>{% for position, total in row.projected.depth | dictsort %}{{ position }} {{ total }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      {% else %}
+      <p class="u-muted mb-0">{{ recommendations.message }}</p>
+      {% endfor %}
+    {% else %}
+      <p class="u-muted mb-0">{% if readonly %}只读视图不生成组合方案；如需测算，请切换到该球队的管理层账号。{% else %}点击「生成组合方案」，系统会结合交易市场与本队需求给出补强建议。{% endif %}</p>
+    {% endif %}
+  </div>
 </section>
 
-<h2 class="h5">未来三季预算</h2>
-<div class="table-responsive mb-4">
-    <table class="table table-hover align-middle">
-        <thead><tr><th>赛季</th><th>按现有合同</th><th>选项均不执行</th><th>工资帽空间</th><th>距税线</th><th>仍有合同的位置</th></tr></thead>
-        <tbody>
-        {% for row in years %}
-        <tr>
-            <th scope="row">{{ row.season }}</th>
-            <td>{{ money(row.current.payroll) }}</td>
-            <td>{{ money(row.current.without_options) }}</td>
-            <td>{{ money(row.cap.cap_amount - row.current.payroll) if row.cap else "未公布" }}</td>
-            <td>{{ money(row.cap.luxury_tax_line - row.current.payroll) if row.cap else "未公布" }}</td>
-            <td>{% for position, total in row.current.depth | dictsort %}{{ position }} {{ total }}{% if not loop.last %} · {% endif %}{% else %}无合同覆盖{% endfor %}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
+<section class="panel mb-4">
+  {{ ui.panel_head('未来三季预算', '选项按合同最后一年模拟，负数表示超额。') }}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>赛季</th><th class="num">按现有合同</th><th class="num">选项均不执行</th><th class="num">工资帽空间</th><th class="num">距税线</th><th>仍有合同的位置</th></tr></thead>
+      <tbody>
+      {% for row in years %}
+      <tr>
+        <th scope="row" class="mono-num">{{ row.season }}</th>
+        <td class="num">{{ money(row.current.payroll) }}</td>
+        <td class="num">{{ money(row.current.without_options) }}</td>
+        <td class="num {{ 'neg' if row.cap and row.cap.cap_amount - row.current.payroll < 0 else 'pos' }}">{{ money(row.cap.cap_amount - row.current.payroll) if row.cap else "未公布" }}</td>
+        <td class="num {{ 'neg' if row.cap and row.cap.luxury_tax_line - row.current.payroll < 0 else 'pos' }}">{{ money(row.cap.luxury_tax_line - row.current.payroll) if row.cap else "未公布" }}</td>
+        <td>{% for position, total in row.current.depth | dictsort %}{{ position }} {{ total }}{% if not loop.last %} · {% endif %}{% else %}无合同覆盖{% endfor %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
     </table>
-    <p class="small text-secondary">选项按合同最后一年模拟。工资帽空间和距税线按现有合同计算，负数表示超额。</p>
-</div>
+  </div>
+</section>
 
-<h2 class="h5">有效合同与到期安排</h2>
-<div class="table-responsive">
-    <table class="table table-hover align-middle">
-        <thead><tr><th>球员</th><th>位置</th><th>合同年度</th><th>首年薪资</th><th>年涨幅</th><th>末年选项</th></tr></thead>
-        <tbody>
-        {% for contract in contracts %}
-        <tr>
-            <th scope="row">{{ contract.name }}</th><td>{{ contract.position }}</td>
-            <td>{{ contract.start_year }} 至 {{ contract.end_year }}</td><td>{{ money(contract.annual_salary) }}</td>
-            <td>{{ (contract.annual_increase_pct * 100) | round(2) }}%</td>
-            <td>{{ "球队选项" if contract.team_option else "球员选项" if contract.player_option else "—" }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="text-secondary">本队暂无有效合同。</td></tr>
-        {% endfor %}
-        </tbody>
+<section class="panel">
+  {% call ui.panel_head('有效合同与到期安排', '按首年薪资排序，含球队/球员选项。') %}
+  <a class="chip" href="{{ url_for('league_dashboard') if current_user.role == ROLE_LEAGUE_ADMIN else url_for('my_team') }}">回到球队</a>
+  {% endcall %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>球员</th><th>位置</th><th>合同年度</th><th class="num">首年薪资</th><th class="num">年涨幅</th><th>末年选项</th></tr></thead>
+      <tbody>
+      {% for contract in contracts %}
+      <tr>
+        <th scope="row">{{ contract.name }}</th>
+        <td><span class="badge-soft-accent">{{ contract.position }}</span></td>
+        <td class="mono-num">{{ contract.start_year }} – {{ contract.end_year }}</td>
+        <td class="num">{{ money(contract.annual_salary) }}</td>
+        <td class="num">{{ (contract.annual_increase_pct * 100) | round(2) }}%</td>
+        <td>{% if contract.team_option %}<span class="chip">球队选项</span>{% elif contract.player_option %}<span class="chip">球员选项</span>{% else %}—{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="u-muted">本队暂无有效合同。</td></tr>
+      {% endfor %}
+      </tbody>
     </table>
-</div>
+  </div>
+</section>
 {% endblock %}

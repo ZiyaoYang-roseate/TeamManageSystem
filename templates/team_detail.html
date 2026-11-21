@@ -3,14 +3,14 @@
 {% block title %}{{ team.name }} - NBA 球队管理系统{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm mb-4 team-banner">
-    <div class="card-body p-4">
+<div class="panel mb-4 team-banner">
+    <div class="panel-body p-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
                 <div class="d-flex align-items-center gap-3">
                     <div class="team-mark">{{ team.abbreviation }}</div>
                     <div>
-                        <h1 class="h3 mb-1">{{ team.city }} {{ team.name }}{% if team.archived_at %} <span class="badge text-bg-secondary">已归档</span>{% endif %}</h1>
+                        <h1 class="page-title mb-1">{{ team.city }} {{ team.name }}{% if team.archived_at %} <span class="badge text-bg-secondary">已归档</span>{% endif %}</h1>
                         <div class="text-secondary">
                             {{ team.arena }} · 主教练：{{ coach.name | chinese_name if coach else "-" }}
                         </div>
@@ -59,7 +59,7 @@
     <div class="tab-pane fade show active" id="rosterTab" role="tabpanel">
         {% include "team_members.html" %}
         <h2 class="h5">现役球员合同概览</h2>
-        <div class="card shadow-sm">
+        <div class="panel">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
@@ -104,8 +104,8 @@
     </div>
 
     <div class="tab-pane fade" id="capTab" role="tabpanel">
-        <div class="card shadow-sm mb-4">
-            <div class="card-body p-4">
+        <div class="panel mb-4">
+            <div class="panel-body p-4">
                 <div class="row g-4">
                     <div class="col-lg-6">
                         <h2 class="h6 mb-3">薪资空间</h2>
@@ -129,9 +129,9 @@
                     </div>
                     <div class="col-lg-6">
                         <h2 class="h6 mb-3">特例与奢侈税</h2>
-                        <div class="text-secondary small">奢侈税线</div>
+                        <div class="u-caps">奢侈税线</div>
                         <div class="fw-semibold mb-3">${{ "{:,}".format(cap.luxury_tax_line if cap else 0) }}</div>
-                        <div class="text-secondary small">第二土豪线</div>
+                        <div class="u-caps">第二土豪线</div>
                         <div class="fw-semibold mb-3">${{ "{:,}".format(cap.second_apron if cap else 0) }}</div>
                     </div>
                 </div>
@@ -140,8 +140,8 @@
 
         <div class="row g-4">
             <div class="col-xl-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <div class="panel h-100">
+                    <div class="panel-head bg-transparent d-flex justify-content-between align-items-center">
                         <h2 class="h6 mb-0">自由球员签约记录</h2>
                         <span class="badge text-bg-primary">{{ signing_history | length }}</span>
                     </div>
@@ -161,7 +161,7 @@
                                     <td class="text-nowrap">{{ signing.signed_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                     <td class="text-nowrap">
                                         <div class="fw-semibold">{{ signing.player_name | chinese_name }}</div>
-                                        <div class="small text-secondary">#{{ signing.jersey_number }} · {{ signing.season }}</div>
+                                        <div class="u-caps">#{{ signing.jersey_number }} · {{ signing.season }}</div>
                                     </td>
                                     <td class="text-nowrap">{{ signing.contract_years }} 年</td>
                                     <td class="text-nowrap">${{ "{:,}".format(signing.annual_salary) }}</td>
@@ -178,8 +178,8 @@
             </div>
 
             <div class="col-xl-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <div class="panel h-100">
+                    <div class="panel-head bg-transparent d-flex justify-content-between align-items-center">
                         <h2 class="h6 mb-0">球员交易记录</h2>
                         <span class="badge text-bg-primary">{{ trade_history | length }}</span>
                     </div>
@@ -197,7 +197,7 @@
                                 <tr>
                                     <td class="text-nowrap">
                                         <div>{{ trade.trade_date.strftime('%Y-%m-%d %H:%M') }}</div>
-                                        <div class="small text-secondary">
+                                        <div class="u-caps">
                                             {{ trade.opponent_name }} ({{ trade.opponent_abbreviation }})
                                         </div>
                                     </td>
@@ -226,7 +226,7 @@
     </div>
 
     <div class="tab-pane fade" id="scheduleTab" role="tabpanel">
-        <div class="card shadow-sm">
+        <div class="panel">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
@@ -288,17 +288,17 @@
     <div class="tab-pane fade" id="statsTab" role="tabpanel">
         <div class="row g-4">
             <div class="col-md-6">
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="text-secondary small">场均得分</div>
+                <div class="panel">
+                    <div class="panel-body p-4">
+                        <div class="u-caps">场均得分</div>
                         <div class="h3">{{ ((standings.points_for / standings.games_played) | round(1)) if standings and standings.games_played else "-" }}</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-6">
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="text-secondary small">场均失分</div>
+                <div class="panel">
+                    <div class="panel-body p-4">
+                        <div class="u-caps">场均失分</div>
                         <div class="h3">{{ ((standings.points_against / standings.games_played) | round(1)) if standings and standings.games_played else "-" }}</div>
                     </div>
                 </div>

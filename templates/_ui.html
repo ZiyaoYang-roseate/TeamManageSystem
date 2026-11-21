@@ -1,0 +1,84 @@
+{# ============================================================================
+   共享 UI 宏 —— Courtside 设计系统（Scorva 结构 + NBA 仪表盘视觉）
+   用法：{% import "_ui.html" as ui with context %}
+   ========================================================================== #}
+
+{% macro page_head(kicker, title, sub=None) -%}
+<header class="page-head">
+  <div class="page-head-main">
+    {% if kicker %}<div class="page-kicker">{{ kicker }}</div>{% endif %}
+    <h1 class="page-title">{{ title }}</h1>
+    {% if sub %}<p class="page-sub">{{ sub }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    {% if caller is defined %}{{ caller() }}{% endif %}
+  </div>
+</header>
+{%- endmacro %}
+
+{% macro panel_head(title, sub=None) -%}
+<div class="panel-head">
+  <div class="panel-head-main">
+    <h2 class="panel-title">{{ title }}</h2>
+    {% if sub %}<div class="panel-sub">{{ sub }}</div>{% endif %}
+  </div>
+  <div class="panel-actions">
+    {% if caller is defined %}{{ caller() }}{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro kpi(label, value, delta=None, foot=None, tone=None) -%}
+<div class="kpi">
+  <div class="kpi-label">{{ label }}</div>
+  <div class="kpi-value">{{ value }}</div>
+  {% if delta %}<div class="kpi-delta{{ ' ' ~ tone if tone else '' }}">{{ delta }}</div>{% endif %}
+  {% if foot %}<div class="kpi-foot">{{ foot }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro stat(label, value, note=None) -%}
+<div class="stat">
+  <div class="lab">{{ label }}</div>
+  <div class="val">{{ value }}</div>
+  {% if note %}<div class="note">{{ note }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro empty(icon, title, hint=None) -%}
+<div class="empty-state">
+  <i class="bi bi-{{ icon }}"></i>
+  <p class="title">{{ title }}</p>
+  {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro team_badge(abbr, size=None) -%}
+<span class="team-badge{{ ' ' ~ size if size else '' }}">{{ abbr }}</span>
+{%- endmacro %}
+
+{% macro team_cell(abbr, name, sub=None) -%}
+<span class="team-cell">
+  {{ team_badge(abbr) }}
+  <span class="min-w-0">
+    <span class="name d-block">{{ name }}</span>
+    {% if sub %}<span class="sub">{{ sub }}</span>{% endif %}
+  </span>
+</span>
+{%- endmacro %}
+
+{% macro kv(label, value, mono=False) -%}
+<div class="kv-item">
+  <div class="k">{{ label }}</div>
+  <div class="v{{ ' mono' if mono else '' }}">{{ value }}</div>
+</div>
+{%- endmacro %}
+
+{% macro kb_row(label, value) -%}
+<div class="k-row"><span>{{ label }}</span><strong>{{ value }}</strong></div>
+{%- endmacro %}
+
+{# 玩家/球队头像式缩写：#号优先，否则姓名首字 #}
+{% macro initials(name) -%}
+{{ (name or '?')[:2] | upper }}
+{%- endmacro %}

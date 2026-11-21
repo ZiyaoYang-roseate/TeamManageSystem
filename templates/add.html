@@ -6,8 +6,8 @@
 <div class="row justify-content-center">
     <div class="col-lg-7">
         <h1 class="h3 mb-4">添加球员</h1>
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
+        <div class="panel">
+            <div class="panel-body p-4">
                 <form action="{{ url_for('add_player') }}" method="post">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <div class="row g-3">

@@ -20,19 +20,19 @@
     {% set played = standings.games_played if standings else 0 %}
     {% set wins = standings.wins if standings else 0 %}
     <dl class="team-season-metrics mb-4">
-        <div class="card card-body">
+        <div class="panel panel-body">
             <dt>赛季战绩</dt><dd>{{ wins }} 胜 {{ played - wins }} 负</dd>
-            <span class="text-secondary small">{{ played }} 场完赛{% if played %} · 胜率 {{ (wins * 100 / played) | round(1) }}%{% endif %}</span>
+            <span class="u-caps">{{ played }} 场完赛{% if played %} · 胜率 {{ (wins * 100 / played) | round(1) }}%{% endif %}</span>
         </div>
-        <div class="card card-body">
+        <div class="panel panel-body">
             <dt>场均得分</dt><dd>{{ "%.1f"|format(standings.points_for / played) if played else "—" }}</dd>
-            <span class="text-secondary small">本赛季已完赛</span>
+            <span class="u-caps">本赛季已完赛</span>
         </div>
-        <div class="card card-body">
+        <div class="panel panel-body">
             <dt>场均失分</dt><dd>{{ "%.1f"|format(standings.points_against / played) if played else "—" }}</dd>
-            <span class="text-secondary small">本赛季已完赛</span>
+            <span class="u-caps">本赛季已完赛</span>
         </div>
-        <div class="card card-body">
+        <div class="panel panel-body">
             <dt>当前阵容</dt><dd>{{ roster_count }} 人</dd>
             <a class="small" href="{{ url_for('team_detail', team_id=team.id, season=season) }}">查看球员与合同</a>
         </div>
@@ -45,12 +45,12 @@
         </div>
         <div class="row g-3">
             <div class="col-xl-5">
-                <article class="card card-body team-match-feature h-100">
+                <article class="panel panel-body team-match-feature h-100">
                     {% set featured = live[0] if live else upcoming[0] if upcoming else None %}
                     {% if featured %}
                     <div class="d-flex justify-content-between align-items-center gap-2">
                         <h3 class="h6 mb-0">{{ '比赛进行中' if live else '下一场比赛' }}</h3>
-                        <span class="text-secondary small">{{ featured.game_date }} · {{ featured.side }}</span>
+                        <span class="u-caps">{{ featured.game_date }} · {{ featured.side }}</span>
                     </div>
                     <div class="team-match-pair">
                         <div><span>{{ team.abbreviation }}</span><strong>{{ team.name }}</strong></div>
@@ -68,25 +68,25 @@
                 </article>
             </div>
             <div class="col-xl-7">
-                <div class="card h-100">
-                    <div class="card-header bg-transparent py-3"><h3 class="h6 mb-0">待开始赛程</h3></div>
+                <div class="panel h-100">
+                    <div class="panel-head bg-transparent py-3"><h3 class="h6 mb-0">待开始赛程</h3></div>
                     {% if upcoming %}
                     <ul class="list-group list-group-flush">
                         {% for match in upcoming %}
                         <li class="list-group-item team-match-row d-flex align-items-center justify-content-between flex-wrap gap-2 py-3">
                             <div>
-                                <div class="fw-semibold">对阵 {{ match.opponent }} <span class="text-secondary small fw-normal">{{ match.opponent_abbr }}</span></div>
-                                <div class="text-secondary small">{{ match.game_date }} · {{ match.side }}</div>
+                                <div class="fw-semibold">对阵 {{ match.opponent }} <span class="u-caps fw-normal">{{ match.opponent_abbr }}</span></div>
+                                <div class="u-caps">{{ match.game_date }} · {{ match.side }}</div>
                             </div>
                             <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analysis_reports.overview', game_id=match.id, kind='scout', team=team.id) }}">赛前分析</a>
                         </li>
                         {% endfor %}
                     </ul>
                     {% else %}
-                    <div class="card-body text-secondary">该赛季暂无待开始赛程。</div>
+                    <div class="panel-body text-secondary">该赛季暂无待开始赛程。</div>
                     {% endif %}
                     {% if live | length > 1 %}
-                    <div class="card-footer bg-transparent">
+                    <div class="panel-foot bg-transparent">
                         {% for match in live[1:] %}
                         <a class="me-3" href="{{ url_for('game_detail', game_id=match.id) }}">进行中 · {{ match.opponent }} {{ match.team_score }} : {{ match.opponent_score }}</a>
                         {% endfor %}
@@ -99,8 +99,8 @@
 
     <div class="row g-3 mb-4">
         <section class="col-xl-7" aria-labelledby="recent-team-games">
-            <div class="card h-100">
-                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="recent-team-games">最近完赛与复盘</h2></div>
+            <div class="panel h-100">
+                <div class="panel-head bg-transparent py-3"><h2 class="h6 mb-0" id="recent-team-games">最近完赛与复盘</h2></div>
                 {% if recent %}
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
@@ -110,7 +110,7 @@
                             {% set win = match.team_score > match.opponent_score %}
                             <tr>
                                 <td class="text-nowrap">{{ match.game_date }}</td>
-                                <th scope="row" class="fw-medium">{{ match.opponent }} <span class="text-secondary small fw-normal">{{ match.side }}</span></th>
+                                <th scope="row" class="fw-medium">{{ match.opponent }} <span class="u-caps fw-normal">{{ match.side }}</span></th>
                                 <td class="text-nowrap"><span class="{{ 'text-success-emphasis' if win else 'text-danger-emphasis' }} me-1">{{ '胜' if win else '负' }}</span>{{ match.team_score }} : {{ match.opponent_score }}</td>
                                 <td class="text-end text-nowrap"><a href="{{ url_for('analysis_reports.overview', game_id=match.id, kind='review', team=team.id) }}">赛后复盘</a></td>
                             </tr>
@@ -119,14 +119,14 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="card-body text-secondary">该赛季暂无已完赛数据。</div>
+                <div class="panel-body text-secondary">该赛季暂无已完赛数据。</div>
                 {% endif %}
             </div>
         </section>
         <section class="col-xl-5" aria-labelledby="team-score-trend">
-            <div class="card h-100">
-                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="team-score-trend">近期得失分走势</h2></div>
-                <div class="card-body">
+            <div class="panel h-100">
+                <div class="panel-head bg-transparent py-3"><h2 class="h6 mb-0" id="team-score-trend">近期得失分走势</h2></div>
+                <div class="panel-body">
                     {% if trend | length > 1 %}
                     <div class="team-score-chart">
                         <canvas id="ownTeamTrend" role="img" aria-label="{{ team.name }}近期得分与失分趋势，数值同最近完赛的比分表"></canvas>
@@ -142,12 +142,12 @@
     {% include "team_members.html" %}
     <div class="row g-3">
         <section class="col-xl-5" aria-labelledby="team-operations">
-            <div class="card h-100">
-                <div class="card-header bg-transparent py-3"><h2 class="h6 mb-0" id="team-operations">球队运营</h2></div>
-                <div class="card-body">
+            <div class="panel h-100">
+                <div class="panel-head bg-transparent py-3"><h2 class="h6 mb-0" id="team-operations">球队运营</h2></div>
+                <div class="panel-body">
                     <dl class="d-grid team-operation-metrics mb-3">
-                        <div><dt>本赛季总薪资</dt><dd>${{ "{:,}".format(payroll) }}</dd></div>
-                        <div><dt>工资帽空间</dt><dd class="{{ 'text-danger-emphasis' if cap and cap_space < 0 else '' }}">{{ '$' ~ "{:,}".format(cap_space) if cap else '—' }}</dd></div>
+                        <div><dt>本赛季总薪资</dt><dd class="mono-num">{{ payroll | money }}</dd></div>
+                        <div><dt>工资帽空间</dt><dd class="mono-num {{ 'neg' if cap and cap_space < 0 else 'pos' }}">{{ cap_space | money if cap else '—' }}</dd></div>
                     </dl>
                     <div class="d-flex flex-wrap gap-2">
                         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('team_detail', team_id=team.id, season=season) }}">阵容与合同</a>
@@ -167,10 +167,10 @@
         const chart = document.getElementById("ownTeamTrend");
         if (!window.Chart) return;
         const colors = getComputedStyle(document.documentElement);
-        const fontColor = colors.getPropertyValue("--bs-secondary-color").trim();
-        const accent = colors.getPropertyValue("--bs-primary-text-emphasis").trim();
-        const second = colors.getPropertyValue("--bs-warning-text-emphasis").trim();
-        const grid = colors.getPropertyValue("--bs-border-color").trim();
+        const fontColor = colors.getPropertyValue("--text-3").trim() || "#74747d";
+        const accent = colors.getPropertyValue("--accent").trim() || "#e8863a";
+        const second = colors.getPropertyValue("--info").trim() || "#4a9eff";
+        const grid = colors.getPropertyValue("--line").trim() || "rgba(255,255,255,.08)";
         new Chart(chart, {
             type: "line",
             data: {

@@ -1,115 +1,213 @@
 {% extends "base.html" %}
-{% block title %}联赛比赛管理{% endblock %}
-{% macro game_link(game, label) %}
-<a class="btn btn-outline-primary btn-sm" href="{{ url_for('league_game',game_id=game.id) }}">{{ label }}</a>
+{% import "_ui.html" as ui with context %}
+{% block title %}联赛运营台 - Courtside{% endblock %}
+
+{% macro game_link(game, label, kind='primary') %}
+<a class="btn btn-sm {{ 'btn-primary' if kind == 'primary' else 'btn-outline-secondary' }}" href="{{ url_for('league_game', game_id=game.id) }}">{{ label }}</a>
 {% endmacro %}
+
 {% block content %}
-<header class="mb-4">
-    <h1 class="h3 mb-2">联赛比赛管理</h1>
-    <p class="text-secondary mb-0">跟进首发提交、确认比赛完赛，处理完当前比赛日后开放下一比赛日。</p>
-</header>
-<section class="card card-body mb-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-        <div>
-            <h2 class="h5 mb-1">{{ season }} · 当前比赛日 {{ overview.business_date or '未设置' }}</h2>
-            {% if overview.next_date %}
-            <p class="small text-secondary mb-0">下一比赛日 {{ overview.next_date }}。
-                {% if overview.blocking_games %}前面仍有 {{ overview.blocking_games|length }} 场比赛未结束，先在下方处理。
-                {% else %}可以开放下一比赛日。{% endif %}
-            </p>
-            {% else %}<p class="small text-secondary mb-0">本赛季暂无下一比赛日。</p>{% endif %}
+{% set day_total = overview.day_games | length %}
+{% set day_open = overview.day_games | selectattr('status', 'in', ['scheduled', 'live']) | list | length %}
+
+{% call ui.page_head('League operations · ' ~ season, '联赛运营台',
+    '当前比赛日 ' ~ (overview.business_date or '未设置') ~ ' · 下一比赛日 ' ~ (overview.next_date or '待定')) %}
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('games', season=season) }}"><i class="bi bi-calendar3 me-1"></i>全部赛程</a>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('teams', season=season) }}"><i class="bi bi-shield me-1"></i>球队档案</a>
+  <a class="btn btn-primary btn-sm" href="{{ url_for('analytics', tab='all', season=season) }}"><i class="bi bi-graph-up me-1"></i>球员数据</a>
+{% endcall %}
+
+<div class="kpi-grid">
+  {{ ui.kpi('进行中的比赛', overview.live | length, '正在计分' if overview.live else '当前无进行中', '实时比分') }}
+  {{ ui.kpi('本日待处理', day_open, '共 ' ~ day_total ~ ' 场安排', '首发 / 完赛确认') }}
+  {{ ui.kpi('待核查记录', overview.reviews | length, '计时与比分异常', '需人工确认') }}
+  {{ ui.kpi('账号覆盖', (overview.teams_count - overview.unassigned | length) ~ ' / ' ~ overview.teams_count, '球队管理账号', '待配置 ' ~ (overview.unassigned | length) ~ ' 支') }}
+</div>
+
+<section class="panel mt-3">
+  <div class="panel-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <div class="u-caps">Business date</div>
+      <h2 class="panel-title mt-1">{{ season }} · 当前比赛日 {{ overview.business_date or '未设置' }}</h2>
+      {% if overview.next_date %}
+      <div class="panel-sub mt-1">
+        下一比赛日 {{ overview.next_date }}。
+        {% if overview.blocking_games %}前面仍有 {{ overview.blocking_games | length }} 场比赛未结束，先处理下方列表。
+        {% else %}可以开放下一比赛日。{% endif %}
+      </div>
+      {% else %}
+      <div class="panel-sub mt-1">本赛季暂无下一比赛日。</div>
+      {% endif %}
+    </div>
+    {% if overview.next_date %}
+    <form method="post" action="{{ url_for('league_business_date') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="season" value="{{ season }}">
+      <input type="hidden" name="business_date" value="{{ overview.next_date }}">
+      <button class="btn btn-primary" {% if not overview.can_advance %}disabled{% endif %}>
+        <i class="bi bi-arrow-right-circle me-1"></i>开放下一比赛日
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-7">
+    <section class="panel h-100">
+      <div class="panel-head">
+        <div class="panel-head-main">
+          <h2 class="panel-title">当前比赛日安排</h2>
+          <div class="panel-sub">跟进首发提交、确认比赛完赛。</div>
         </div>
-        {% if overview.next_date %}
-        <form method="post" action="{{ url_for('league_business_date') }}">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="season" value="{{ season }}">
-            <input type="hidden" name="business_date" value="{{ overview.next_date }}">
-            <button class="btn btn-primary" {% if not overview.can_advance %}disabled{% endif %}>开放下一比赛日</button>
-        </form>
-        {% endif %}
-    </div>
-</section>
-{% if overview.live %}
-<section class="mb-4">
-    <h2 class="h5 mb-2">进行中 · {{ overview.live|length }} 场</h2>
-    <p class="small text-secondary">后续没有新增统计时，可以按当前领先比分确认完赛；打平的比赛需继续计分。</p>
-    <ul class="list-group">
-        {% for game in overview.live %}
-        <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-3 py-3">
-            <div>
-                <strong>{{ game.home }} {{ game.home_score }} : {{ game.away_score }} {{ game.away }}</strong>
-                <div class="small text-secondary">{{ game.game_date }} · 第 {{ game.period }} 节 · 剩余 {{ '%d:%02d'|format(game.seconds_remaining // 60,game.seconds_remaining % 60) }}</div>
-            </div>{{ game_link(game,"处理比赛") }}
-        </li>
-        {% endfor %}
-    </ul>
-</section>
-{% endif %}
-<section class="mb-4">
-    <div class="d-flex justify-content-between align-items-baseline gap-2 mb-2">
-        <h2 class="h5 mb-0">当前比赛日安排</h2>
-        <a class="small" href="{{ url_for('games',season=season) }}">查看全赛程</a>
-    </div>
-    <div class="table-responsive">
-        <table class="table align-middle">
-            <thead><tr><th>比赛</th><th>状态</th><th>双方首发</th><th class="text-end">操作</th></tr></thead>
-            <tbody>
-                {% for game in overview.day_games %}
-                <tr>
-                    <th scope="row">{{ game.home }} 对 {{ game.away }}</th>
-                    <td>{{ {'scheduled':'待开赛','live':'进行中','finished':'已完赛','cancelled':'已取消'}.get(game.status,game.status) }}</td>
-                    <td>{% if game.status in ('finished','cancelled') %}—{% else %}{{ game.home_abbr }} {{ game.home_starters }}/5 · {{ game.away_abbr }} {{ game.away_starters }}/5{% endif %}</td>
-                    <td class="text-end">{{ game_link(game,"查看首发" if game.status == 'scheduled' else "处理比赛" if game.status == 'live' else "查看记录") }}</td>
-                </tr>
-                {% else %}<tr><td colspan="4" class="text-secondary">当前比赛日暂无比赛。</td></tr>{% endfor %}
-            </tbody>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('games', season=season) }}">查看全赛程</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>比赛</th><th>状态</th><th>双方首发</th><th class="text-end">操作</th></tr></thead>
+          <tbody>
+            {% for game in overview.day_games %}
+            <tr>
+              <th scope="row" class="fw-normal">{{ game.home }} <span class="u-muted">对</span> {{ game.away }}</th>
+              <td>
+                {% if game.status == 'live' %}<span class="badge badge-live">进行中</span>
+                {% elif game.status == 'scheduled' %}<span class="badge text-bg-warning">待开赛</span>
+                {% elif game.status == 'finished' %}<span class="badge text-bg-secondary">已完赛</span>
+                {% else %}<span class="badge text-bg-secondary">已取消</span>{% endif %}
+              </td>
+              <td class="mono-num">
+                {% if game.status in ('finished', 'cancelled') %}—{% else %}{{ game.home_abbr }} {{ game.home_starters }}/5 · {{ game.away_abbr }} {{ game.away_starters }}/5{% endif %}
+              </td>
+              <td class="text-end">{{ game_link(game, "查看首发" if game.status == 'scheduled' else "处理比赛" if game.status == 'live' else "查看记录", 'outline') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">{{ ui.empty('bi-calendar3', '当前比赛日暂无比赛') }}</td></tr>
+            {% endfor %}
+          </tbody>
         </table>
-    </div>
-</section>
-{% if overview.blocking_games|rejectattr('game_date','equalto',overview.business_date)|list %}
-<section class="mb-4">
-    <h2 class="h5">较早日期的未结束比赛</h2>
-    <ul class="list-group">
-        {% for game in overview.blocking_games if game.game_date != overview.business_date %}
-        <li class="list-group-item d-flex justify-content-between gap-2">
-            <span>{{ game.game_date }} · {{ game.home }} 对 {{ game.away }}</span>{{ game_link(game,"处理比赛") }}
-        </li>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-5">
+    <section class="panel h-100">
+      <div class="panel-head">
+        <div class="panel-head-main">
+          <h2 class="panel-title">进行中的比赛</h2>
+          <div class="panel-sub">实时比分与比赛时钟。</div>
+        </div>
+        <span class="badge text-bg-secondary">{{ overview.live | length }} 场</span>
+      </div>
+      <div class="panel-body">
+        {% for game in overview.live %}
+        <div class="row-line">
+          <div class="row-main">
+            <div class="row-title">{{ game.home }} <span class="mono-num">{{ game.home_score }} : {{ game.away_score }}</span> {{ game.away }}</div>
+            <div class="row-meta">{{ game.game_date }} · 第 {{ game.period }} 节 · 剩余 {{ '%d:%02d' | format(game.seconds_remaining // 60, game.seconds_remaining % 60) }}</div>
+          </div>
+          <div class="row-side">{{ game_link(game, "处理", 'outline') }}</div>
+        </div>
+        {% else %}
+        {{ ui.empty('bi-broadcast', '当前没有进行中的比赛', '比赛开始后会在这里显示实时比分。') }}
         {% endfor %}
-    </ul>
-</section>
-{% endif %}
-{% if overview.reviews %}
-<section class="mb-4">
-    <h2 class="h5">待处理的记录核查 · {{ overview.reviews|length }} 场</h2>
-    <ul class="list-group">
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-6">
+    <section class="panel h-100">
+      <div class="panel-head">
+        <div class="panel-head-main">
+          <h2 class="panel-title">记录核查</h2>
+          <div class="panel-sub">计时或比分异常，需人工确认。</div>
+        </div>
+        <span class="badge text-bg-secondary">{{ overview.reviews | length }} 场</span>
+      </div>
+      <div class="panel-body">
         {% for game in overview.reviews %}
-        <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <span>{{ game.game_date }} · {{ game.home }} {{ game.home_score }} : {{ game.away_score }} {{ game.away }}</span>
-            {{ game_link(game,"处理核查") }}
-        </li>
+        <div class="row-line">
+          <div class="row-main">
+            <div class="row-title">{{ game.home }} {{ game.home_score }} : {{ game.away_score }} {{ game.away }}</div>
+            <div class="row-meta">{{ game.game_date }}</div>
+          </div>
+          <div class="row-side">{{ game_link(game, "处理核查", 'outline') }}</div>
+        </div>
+        {% else %}
+        {{ ui.empty('bi-check2-circle', '没有待核查的比赛', '完成比赛的时钟与比分记录正常。') }}
         {% endfor %}
-    </ul>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-6">
+    <section class="panel h-100">
+      <div class="panel-head">
+        <div class="panel-head-main">
+          <h2 class="panel-title">最近完赛</h2>
+          <div class="panel-sub">最近完成的比赛与记录入口。</div>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('games', season=season, status='finished') }}">全部完赛</a>
+      </div>
+      <div class="panel-body">
+        {% for game in overview.completed %}
+        <div class="row-line">
+          <div class="row-main">
+            <div class="row-title">{{ game.home }} <span class="mono-num">{{ game.home_score }} : {{ game.away_score }}</span> {{ game.away }}</div>
+            <div class="row-meta">{{ game.game_date }}</div>
+          </div>
+          <div class="row-side">{{ game_link(game, "查看记录", 'outline') }}</div>
+        </div>
+        {% else %}
+        {{ ui.empty('bi-archive', '暂无完赛记录') }}
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+
+{% if overview.blocking_games | rejectattr('game_date', 'equalto', overview.business_date) | list %}
+<section class="panel mt-3">
+  <div class="panel-head">
+    <div class="panel-head-main">
+      <h2 class="panel-title">较早日期的未结束比赛</h2>
+      <div class="panel-sub">这些比赛会阻止比赛日推进。</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    {% for game in overview.blocking_games if game.game_date != overview.business_date %}
+    <div class="row-line">
+      <div class="row-main"><div class="row-title">{{ game.home }} 对 {{ game.away }}</div><div class="row-meta">{{ game.game_date }}</div></div>
+      <div class="row-side">{{ game_link(game, "处理比赛", 'outline') }}</div>
+    </div>
+    {% endfor %}
+  </div>
 </section>
 {% endif %}
-<section class="mb-4">
-    <h2 class="h5">最近完赛</h2>
-    <ul class="list-group">
-        {% for game in overview.completed %}
-        <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <span>{{ game.game_date }} · {{ game.home }} {{ game.home_score }} : {{ game.away_score }} {{ game.away }}</span>
-            {{ game_link(game,"查看记录") }}
-        </li>
-        {% else %}<li class="list-group-item text-secondary">暂无完赛记录。</li>{% endfor %}
-    </ul>
-</section>
-<details class="border-top pt-3">
-    <summary class="fw-semibold">联赛基础资料</summary>
-    <div class="d-flex flex-wrap gap-2 mt-3 mb-2">
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('teams',season=season) }}">球队档案</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('analytics', tab='all',season=season) }}">球员数据</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('league_draft_pool') }}">发布选秀候选人</a>
+
+<section class="panel mt-3">
+  <div class="panel-head">
+    <div class="panel-head-main">
+      <h2 class="panel-title">联赛基础资料</h2>
+      <div class="panel-sub">球队账号覆盖与资料入口。</div>
     </div>
-    <p class="small text-secondary">管理账号已覆盖 {{ overview.teams_count - overview.unassigned|length }} / {{ overview.teams_count }} 支球队。</p>
-    {% for team in overview.unassigned %}<span class="small text-secondary me-2">{{ team.name }}待配置账号</span>{% endfor %}
-</details>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('teams', season=season) }}">球队档案</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('league_draft_pool') }}">选秀候选人</a>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="mini-stats mb-3">
+      <div><div class="k">已覆盖球队</div><div class="v">{{ overview.teams_count - overview.unassigned | length }} / {{ overview.teams_count }}</div></div>
+      <div><div class="k">待配置</div><div class="v">{{ overview.unassigned | length }}</div></div>
+      <div><div class="k">当前比赛日</div><div class="v">{{ overview.business_date or '—' }}</div></div>
+    </div>
+    {% if overview.unassigned %}
+    <div class="d-flex flex-wrap gap-2">
+      {% for team in overview.unassigned %}<span class="chip">{{ team.name }} · 待配置账号</span>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
 {% endblock %}

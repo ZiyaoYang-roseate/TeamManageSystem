@@ -4,8 +4,8 @@
 
 {% block content %}
 <div class="page-heading mb-4">
-    <h1 class="h3 mb-1">发起球员交易</h1>
-    <div class="text-secondary small">只能代表自己的球队发出方案，对方管理层接受后交易才会执行</div>
+    <h1 class="page-title mb-1">发起球员交易</h1>
+    <div class="u-caps">只能代表自己的球队发出方案，对方管理层接受后交易才会执行</div>
 </div>
 
 {% with assistant_description="自动从其他球队查找最多三套多人交易方案，结合比赛表现、阵容位置和双方配平条件。", assistant_button="生成交易方案" %}
@@ -31,33 +31,33 @@
 
 <div class="row g-4">
     <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header text-bg-primary d-flex justify-content-between align-items-center">
+        <div class="panel h-100">
+            <div class="panel-head text-bg-primary d-flex justify-content-between align-items-center">
                 <span class="fw-semibold">我方可送出球员</span>
                 <span class="small" id="teamAOutgoing">换出 $0</span>
             </div>
-            <div class="card-body">
-                <div class="text-secondary small mb-3">勾选球员加入拟换出筹码</div>
+            <div class="panel-body">
+                <div class="u-caps mb-3">勾选球员加入拟换出筹码</div>
                 <div id="teamAPlayers" class="player-checklist"></div>
             </div>
         </div>
     </div>
     <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header text-bg-danger d-flex justify-content-between align-items-center">
+        <div class="panel h-100">
+            <div class="panel-head text-bg-danger d-flex justify-content-between align-items-center">
                 <span class="fw-semibold">希望对方送出的球员</span>
                 <span class="small" id="teamBOutgoing">换出 $0</span>
             </div>
-            <div class="card-body">
-                <div class="text-secondary small mb-3">勾选球员加入拟换出筹码</div>
+            <div class="panel-body">
+                <div class="u-caps mb-3">勾选球员加入拟换出筹码</div>
                 <div id="teamBPlayers" class="player-checklist"></div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card shadow-sm mt-4">
-    <div class="card-body text-center p-4">
+<div class="panel mt-4">
+    <div class="panel-body text-center p-4">
         <button class="btn btn-primary btn-lg" id="validateTradeButton">
             <i class="bi bi-shield-check me-1"></i>校验交易合法性
         </button>

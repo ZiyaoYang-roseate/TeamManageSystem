@@ -4,8 +4,8 @@
 
 {% block content %}
 <div class="page-heading mb-4">
-    <h1 class="h3 mb-1">球队</h1>
-    <div class="text-secondary small">选择球队查看阵容、薪资和赛季数据</div>
+    <h1 class="page-title mb-1">球队</h1>
+    <div class="u-caps">选择球队查看阵容、薪资和赛季数据</div>
     {% if current_user.role == ROLE_LEAGUE_ADMIN %}
     <a href="{{ url_for('add_team') }}" class="btn btn-primary mt-2">添加球队</a>
     {% endif %}
@@ -15,8 +15,8 @@
     {% for team in teams %}
     <div class="col-md-6 col-xl-4">
         <a href="{{ url_for('team_detail', team_id=team.id) }}" class="text-decoration-none">
-            <div class="card team-card h-100 shadow-sm">
-                <div class="card-body p-4">
+            <div class="panel team-card h-100">
+                <div class="panel-body p-4">
                     <div class="d-flex justify-content-between align-items-start mb-4">
                         <div>
                             <div class="h4 mb-1">{{ team.name }}{% if team.archived_at %} <span class="badge text-bg-secondary">已归档</span>{% endif %}</div>
@@ -27,20 +27,20 @@
 
                     <div class="row text-center g-3 mb-4">
                         <div class="col-4">
-                            <div class="text-secondary small">战绩</div>
+                            <div class="u-caps">战绩</div>
                             <div class="fw-semibold">{{ team.wins }}胜-{{ team.games_played - team.wins }}负</div>
                         </div>
                         <div class="col-4">
-                            <div class="text-secondary small">球员</div>
+                            <div class="u-caps">球员</div>
                             <div class="fw-semibold">{{ team.player_count }}</div>
                         </div>
                         <div class="col-4">
-                            <div class="text-secondary small">主场</div>
+                            <div class="u-caps">主场</div>
                             <div class="fw-semibold small">{{ team.arena }}</div>
                         </div>
                     </div>
 
-                    <div class="d-flex justify-content-between small text-secondary mb-2">
+                    <div class="u-caps d-flex justify-content-between mb-2">
                         <span>薪资空间占用</span>
                         <span>{{ team.cap_pct }}%</span>
                     </div>

@@ -55,7 +55,15 @@ from league_operations import league_overview, game_operations, update_game_revi
 from roster import lock_player, lock_teams, require_roster_idle, season_salary_sql, sign_free_agent_with_cursor, team_payroll
 from roster_packages import check_followup_after_trade, recommend_packages
 from roster_recommendations import trade_recommendations
-from security import can_edit_team, csrf_token, management_team_id, require_csrf, require_league_admin
+from security import (
+    can_edit_team,
+    csrf_token,
+    management_team_id,
+    planning_team_id,
+    planning_teams,
+    require_csrf,
+    require_league_admin,
+)
 from trade import decode_proposal_side, encode_proposal_side, execute_trade_with_cursor, validate_trade
 
 
@@ -65,10 +73,81 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE") == "1",
+    TEMPLATES_AUTO_RELOAD=True,
 )
+app.jinja_env.auto_reload = True
 app.register_blueprint(free_agency_blueprint)
 app.register_blueprint(analysis_blueprint)
 app.jinja_env.filters.update(chinese_name=chinese_name, chinese_names_in_text=chinese_names_in_text)
+
+
+# ---------------------------------------------------------------- formatting filters
+def _as_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_n1(value):
+    return f"{_as_float(value):,.1f}"
+
+
+def fmt_n0(value):
+    return f"{_as_float(value):,.0f}"
+
+
+def fmt_signed1(value):
+    number = _as_float(value)
+    return f"{number:+,.1f}"
+
+
+def fmt_pct1(value):
+    return f"{_as_float(value) * 100:.1f}%"
+
+
+def fmt_money(value):
+    amount = _as_float(value)
+    if abs(amount) >= 1_000_000:
+        return f"${amount / 1_000_000:,.1f}M"
+    if abs(amount) >= 1_000:
+        return f"${amount / 1_000:,.0f}K"
+    return f"${amount:,.0f}"
+
+
+def fmt_clock(seconds):
+    total = max(0, int(_as_float(seconds)))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def fmt_md(value):
+    return value.strftime("%m-%d") if hasattr(value, "strftime") else str(value or "")[5:10]
+
+
+def fmt_ymd(value):
+    return value.strftime("%Y-%m-%d") if hasattr(value, "strftime") else str(value or "")[:10]
+
+
+_WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+
+def fmt_weekday(value):
+    return _WEEKDAYS[value.weekday()] if hasattr(value, "weekday") else ""
+
+
+app.jinja_env.filters.update(
+    n1=fmt_n1,
+    n0=fmt_n0,
+    signed1=fmt_signed1,
+    pct1=fmt_pct1,
+    money=fmt_money,
+    clock=fmt_clock,
+    md=fmt_md,
+    ymd=fmt_ymd,
+    weekday=fmt_weekday,
+)
 
 
 @app.errorhandler(BusinessError)
@@ -148,6 +227,9 @@ def _safe_next_url():
 def enforce_access():
     endpoint = request.endpoint
     if endpoint is None or endpoint == "static":
+        if endpoint is None and session.get("user_id"):
+            # 让 404 等未匹配路由也能带着登录身份渲染导航与页脚
+            g.user = get_user_by_id(session["user_id"])
         return None
     unsafe_method = request.method not in {"GET", "HEAD", "OPTIONS"}
     if endpoint in {"login", "logout"}:
@@ -867,7 +949,7 @@ def login():
                 return redirect(next_url)
             return redirect(url_for(_role_home(user["role"])))
 
-    return render_template("login.html", next_url=request.args.get("next", "")), {
+    return render_template("login.html", next_url=request.args.get("next", ""), season=current_season()), {
         "Cache-Control": "no-store",
     }
 
@@ -879,6 +961,40 @@ def logout():
     return redirect(url_for("login"))
 
 
+@ttl_cache(seconds=120)
+def league_recent_games(season, limit=8):
+    return fetch_all(
+        """
+        SELECT g.id, g.game_date, g.status, g.home_score, g.away_score,
+               ht.name AS home_team_name, ht.city AS home_team_city, ht.abbreviation AS home_team_abbr,
+               at.name AS away_team_name, at.city AS away_team_city, at.abbreviation AS away_team_abbr
+        FROM games g
+        JOIN teams ht ON ht.id = g.home_team_id
+        JOIN teams at ON at.id = g.away_team_id
+        WHERE g.season = %s AND g.status IN ('finished', 'live')
+        ORDER BY g.game_date DESC, g.id DESC
+        LIMIT %s
+        """,
+        (season, limit),
+    )
+
+
+@ttl_cache(seconds=120)
+def league_snapshot(season):
+    return fetch_one(
+        """
+        SELECT COUNT(*) AS total_games,
+               COALESCE(SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END), 0) AS games_finished,
+               AVG(CASE WHEN status = 'finished' THEN home_score + away_score END) AS avg_total,
+               AVG(CASE WHEN status = 'finished' THEN home_score END) AS avg_home,
+               MAX(game_date) AS latest_date
+        FROM games
+        WHERE season = %s
+        """,
+        (season,),
+    )
+
+
 @app.route("/")
 def index():
     season = current_season()
@@ -887,6 +1003,8 @@ def index():
         standings=team_standings(season),
         scorers=scoring_leaders(season),
         efficient_players=efficiency_leaders(season),
+        recent_games=league_recent_games(season),
+        snapshot=league_snapshot(season),
         season=season,
         seasons=SEASONS,
     )
@@ -1061,8 +1179,12 @@ def _package_serializer():
 
 @app.route("/salary", methods=["GET", "POST"])
 def salary():
-    team_id = management_team_id()
+    team_id = planning_team_id()
     season = current_season()
+    readonly = bool(getattr(g, "planning_readonly", False))
+    if readonly and request.method == "POST":
+        flash("联赛管理员查看薪资为只读视图；如需调整合同，请切换到该球队的管理层账号。", "warning")
+        return redirect(url_for("salary", season=season, team_id=team_id), code=303)
     team, years, contracts = team_planning.salary_plan(team_id, season)
     recommendations = None
     if request.method == "POST":
@@ -1071,7 +1193,14 @@ def salary():
         for plan in recommendations["plans"]:
             plan["token"] = serializer.dumps(plan.pop("payload"))
     return render_template(
-        "salary.html", team=team, season=season, years=years, contracts=contracts, recommendations=recommendations,
+        "salary.html",
+        team=team,
+        season=season,
+        years=years,
+        contracts=contracts,
+        recommendations=recommendations,
+        readonly=readonly,
+        teams=planning_teams() if readonly else [],
     ), {"Cache-Control": "private, no-store"}
 
 
@@ -1114,11 +1243,15 @@ def health():
 
 @app.route("/scouting", methods=["GET", "POST"])
 def scouting():
-    team_id = management_team_id()
+    team_id = planning_team_id()
     season = current_season()
+    readonly = bool(getattr(g, "planning_readonly", False))
     values = request.form if request.method == "POST" else request.args
     raw_year = values.get("year")
     year = bounded_int(raw_year, "选秀年份", 2000, 2100) if raw_year else None
+    if readonly and request.method == "POST":
+        flash("联赛管理员查看选秀板为只读视图；如需调整优先顺序，请切换到该球队的管理层账号。", "warning")
+        return redirect(url_for("scouting", year=year, season=season, team_id=team_id), code=303)
     comparison = None
     recommendations = None
     if request.method == "POST":
@@ -1147,7 +1280,16 @@ def scouting():
             recommendations = team_planning.draft_recommendations(workspace)
         else:
             comparison = team_planning.draft_comparison(workspace, selected)
-    return render_template("scouting.html", workspace=workspace, comparison=comparison, recommendations=recommendations, season=season), {
+    return render_template(
+        "scouting.html",
+        workspace=workspace,
+        comparison=comparison,
+        recommendations=recommendations,
+        season=season,
+        current_team_id=team_id,
+        readonly=readonly,
+        teams=planning_teams() if readonly else [],
+    ), {
         "Cache-Control": "private, no-store",
     }
 
@@ -1897,6 +2039,25 @@ def games():
         """
         params.extend([like, like, like, like])
 
+    status_filter = request.args.get("status") or ""
+    status_counts = {"scheduled": 0, "live": 0, "finished": 0, "cancelled": 0}
+    for row in fetch_all(
+        f"""
+        SELECT g.status, COUNT(*) AS total
+        FROM games g LEFT JOIN scorekeeper_business_dates bd ON bd.season=g.season
+        JOIN teams ht ON ht.id = g.home_team_id
+        JOIN teams at ON at.id = g.away_team_id
+        {where_clause}
+        GROUP BY g.status
+        """,
+        tuple(params),
+    ):
+        status_counts[str(row["status"])] = row["total"]
+
+    if status_filter in {"finished", "live", "scheduled", "cancelled"}:
+        where_clause += " AND g.status = %s"
+        params.append(status_filter)
+
     total = fetch_one(
         f"""
         SELECT COUNT(*) AS total
@@ -1953,7 +2114,60 @@ def games():
         seasons=SEASONS,
         search=search,
         filtered_team=filtered_team, business_date=setting["business_date"] if setting else None,
+        status_counts=status_counts, status_filter=status_filter,
     )
+
+
+def game_line_score(game_id):
+    rows = fetch_all(
+        """
+        SELECT period, seconds_remaining, id, score_home, score_away
+        FROM play_by_play
+        WHERE game_id = %s AND voided_at IS NULL
+        ORDER BY period ASC, seconds_remaining DESC, id ASC
+        """,
+        (game_id,),
+    )
+    closes: dict[int, dict] = {}
+    for row in rows:
+        closes[int(row["period"])] = row
+    segments = []
+    prev_home = prev_away = 0
+    for period in sorted(closes):
+        row = closes[period]
+        home_total = int(row["score_home"] or 0)
+        away_total = int(row["score_away"] or 0)
+        segments.append(
+            {
+                "label": f"Q{period}" if period <= 4 else f"OT{period - 4}",
+                "home": home_total - prev_home,
+                "away": away_total - prev_away,
+            }
+        )
+        prev_home, prev_away = home_total, away_total
+    return segments
+
+
+def game_box_totals(lines):
+    total = {
+        "points": 0, "rebounds": 0, "assists": 0, "steals": 0, "blocks": 0,
+        "turnovers": 0, "fouls": 0, "plus_minus": 0,
+        "fgm": 0, "fga": 0, "tpm": 0, "ftm": 0, "fta": 0,
+        "seconds": 0,
+    }
+    for line in lines:
+        for key in ("points", "rebounds", "assists", "steals", "blocks", "turnovers", "fouls", "plus_minus"):
+            total[key] += int(line.get(key) or 0)
+        total["fgm"] += int(line.get("field_goals_made") or 0)
+        total["fga"] += int(line.get("field_goals_attempted") or 0)
+        total["tpm"] += int(line.get("three_points_made") or 0)
+        total["ftm"] += int(line.get("free_throws_made") or 0)
+        total["fta"] += int(line.get("free_throws_attempted") or 0)
+        total["seconds"] += int(line.get("seconds_played") or 0)
+    total["fg_pct"] = round(total["fgm"] / total["fga"] * 100, 1) if total["fga"] else 0.0
+    total["ft_pct"] = round(total["ftm"] / total["fta"] * 100, 1) if total["fta"] else 0.0
+    total["minutes"] = round(total["seconds"] / 60)
+    return total
 
 
 @app.route("/games/<int:game_id>")
@@ -1974,7 +2188,22 @@ def game_detail(game_id):
         """,
         (game_id,),
     )
-    return render_template("game_detail.html", game=game, stats=stat_lines)
+    home_lines = [row for row in stat_lines if row["team_id"] == game["home_team_id"]]
+    away_lines = [row for row in stat_lines if row["team_id"] == game["away_team_id"]]
+    home_totals = game_box_totals(home_lines)
+    away_totals = game_box_totals(away_lines)
+    home_win = (game.get("home_score") or 0) > (game.get("away_score") or 0)
+    return render_template(
+        "game_detail.html",
+        game=game,
+        stats=stat_lines,
+        home_lines=home_lines,
+        away_lines=away_lines,
+        home_totals=home_totals,
+        away_totals=away_totals,
+        line_score=game_line_score(game_id),
+        home_win=home_win,
+    )
 
 
 @app.route("/games/<int:game_id>/play-by-play")
@@ -2204,6 +2433,50 @@ def scorekeeper_game_reverse(game_id, event_id):
     except scorekeeper.ScorekeeperError as exc:
         return jsonify({"error": exc.message}), exc.status_code
     return jsonify(result), {"Cache-Control": "no-store"}
+
+
+def _error_page(code, title, message, hint=None, kicker=None):
+    user = getattr(g, "user", None)
+    if user and user["role"] == ROLE_LEAGUE_ADMIN:
+        home = url_for("league_dashboard")
+    else:
+        home = url_for("index")
+    return (
+        render_template(
+            "error.html",
+            code=code,
+            title=title,
+            message=message,
+            hint=hint,
+            kicker=kicker or "Courtside error",
+            home_url=home,
+        ),
+        code,
+    )
+
+
+@app.errorhandler(403)
+def handle_forbidden(exc):
+    return _error_page(
+        403,
+        "这一步需要另一种身份",
+        "当前账号看不到这个页面，或这个操作只对特定角色开放。侧栏里灰掉的入口同样属于权限范围之外。",
+        getattr(exc, "description", None)
+        if getattr(exc, "description", None) and not str(getattr(exc, "description", "")).startswith("You don't")
+        else "联赛管理员可以只读查看球队薪资与选秀板；写入操作请使用对应球队的管理层账号。",
+        kicker="Access restricted",
+    )
+
+
+@app.errorhandler(404)
+def handle_not_found(exc):
+    return _error_page(
+        404,
+        "没有找到这个页面",
+        "链接可能已经失效，或这条记录已被删除。可以从工作台重新进入对应模块。",
+        None,
+        kicker="Not found",
+    )
 
 
 if __name__ == "__main__":

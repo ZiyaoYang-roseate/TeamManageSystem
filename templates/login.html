@@ -3,159 +3,332 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>登录 - NBA 球队管理系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <title>登录 - Courtside · NBA 球队管理系统</title>
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem("theme");
+                if (theme === "light" || theme === "dark") {
+                    document.documentElement.setAttribute("data-bs-theme", theme);
+                }
+            } catch (error) { /* ignore */ }
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/motion.css') }}">
     <style>
-        :root {
-            --login-bg: #0b0f14;
-            --panel-bg: #151b22;
-            --panel-border: #26313c;
-            --muted: #9aa7b4;
-            --accent: #0d6efd;
-        }
-
         body {
             min-height: 100vh;
+            margin: 0;
             display: grid;
             place-items: center;
-            margin: 0;
-            background: var(--login-bg);
-            color: #dfe6ee;
-            padding: 24px;
+            padding: 22px;
+            background:
+                radial-gradient(70% 60% at 15% 0%, rgba(232,134,58,.12), transparent 62%),
+                radial-gradient(60% 70% at 95% 100%, rgba(74,158,255,.06), transparent 60%),
+                var(--bg);
         }
-
-        .login-panel {
+        .login-shell {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
             width: 100%;
-            max-width: 420px;
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 10px;
-            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
-            padding: 32px;
+            max-width: 940px;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            overflow: hidden;
+            background: var(--surface-1);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
         }
-
+        .login-visual {
+            position: relative;
+            padding: 34px 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 28px;
+            background: #080706 url("{{ url_for('static', filename='img/hero-court.jpg') }}") right center / auto 132% no-repeat;
+            isolation: isolate;
+        }
+        .login-visual::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            background: linear-gradient(100deg, rgba(8,7,6,.96) 34%, rgba(8,7,6,.62) 68%, rgba(8,7,6,.32));
+        }
         .login-brand {
             display: flex;
             align-items: center;
-            gap: 10px;
-            color: #fff;
+            gap: 11px;
+            font-family: var(--font-display);
             font-weight: 700;
             font-size: 20px;
-            letter-spacing: 0;
+            letter-spacing: -.02em;
+            color: var(--text-1);
         }
-
-        .login-subtitle {
-            color: var(--muted);
+        .login-brand .brand-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(140deg, var(--accent-2), #c25f18);
+            color: var(--accent-ink);
+            font-family: var(--font-mono);
+            font-size: 15px;
+            font-weight: 700;
+            box-shadow: 0 6px 18px rgba(232, 134, 58, .28);
+        }
+        .login-brand .brand-sub {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 9px;
+            letter-spacing: .22em;
+            text-transform: uppercase;
+            color: var(--text-3);
+            font-weight: 400;
+            margin-top: 2px;
+        }
+        .visual-copy .hero-kicker {
+            font-family: var(--font-mono);
+            font-size: 10.5px;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+        .visual-copy h1 {
+            font-family: var(--font-display);
+            font-size: clamp(26px, 3vw, 34px);
+            font-weight: 700;
+            letter-spacing: -.03em;
+            line-height: 1.16;
+            margin: 0 0 12px;
+        }
+        .visual-copy p {
+            margin: 0;
+            color: var(--text-2);
+            font-size: 13px;
+            max-width: 32ch;
+            line-height: 1.6;
+        }
+        .visual-meta {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1px;
+            background: var(--line-soft);
+            border: 1px solid var(--line-soft);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .visual-meta div {
+            background: rgba(12, 12, 16, .72);
+            padding: 10px 12px;
+            backdrop-filter: blur(6px);
+        }
+        .visual-meta .k {
+            font-family: var(--font-mono);
+            font-size: 8.5px;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--text-3);
+        }
+        .visual-meta .v {
+            font-family: var(--font-mono);
             font-size: 14px;
+            font-weight: 600;
+            color: var(--text-1);
+            margin-top: 3px;
         }
-
-        .role-choice {
-            position: relative;
-            cursor: pointer;
+        .login-panel {
+            padding: 34px 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 18px;
+            background: var(--surface-2);
         }
-
+        .login-panel .page-kicker {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: var(--text-3);
+        }
+        .login-panel h2 {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -.02em;
+            margin: 4px 0 0;
+        }
+        .role-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .role-choice { position: relative; cursor: pointer; margin: 0; }
         .role-choice input {
             position: absolute;
             opacity: 0;
             pointer-events: none;
         }
-
         .role-choice .role-box {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            border: 1px solid var(--panel-border);
-            border-radius: 8px;
-            padding: 12px 14px;
-            color: #c7d0da;
-            transition: border-color 0.18s ease, background 0.18s ease;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+            height: 100%;
+            padding: 10px 11px;
+            border: 1px solid var(--line);
+            border-radius: var(--r-md);
+            background: var(--surface-1);
+            color: var(--text-2);
+            font-size: 11.5px;
+            line-height: 1.3;
+            transition: border-color .2s var(--ease), background .2s var(--ease), color .2s var(--ease), transform .2s var(--ease);
         }
-
+        .role-choice .role-box i { font-size: 15px; color: var(--text-3); transition: color .2s var(--ease); }
+        .role-choice:hover .role-box { border-color: var(--line-strong); transform: translateY(-1px); }
         .role-choice input:checked + .role-box {
-            border-color: var(--accent);
-            background: rgba(13, 110, 253, 0.14);
-            color: #fff;
+            border-color: rgba(232, 134, 58, .62);
+            background: var(--accent-soft);
+            color: var(--text-1);
+            box-shadow: inset 0 0 0 1px rgba(232, 134, 58, .22);
         }
-
-        .form-control,
-        .form-select {
-            background-color: #0f1419;
-            border-color: var(--panel-border);
-            color: #dfe6ee;
+        .role-choice input:checked + .role-box i { color: var(--accent); }
+        .role-choice input:focus-visible + .role-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .login-foot {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: .06em;
+            color: var(--text-3);
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
         }
-
-        .form-control:focus,
-        .form-select:focus {
-            background-color: #0f1419;
-            border-color: var(--accent);
-            color: #dfe6ee;
-            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+        @media (max-width: 899.98px) {
+            .login-shell { grid-template-columns: 1fr; max-width: 460px; }
+            .login-visual { padding: 24px; gap: 18px; }
+            .visual-meta { display: none; }
+            .login-panel { padding: 26px 24px; }
         }
-
     </style>
 </head>
 <body>
-    <main class="login-panel">
-        <div class="login-brand mb-1">
-            <i class="bi bi-dribbble text-primary"></i>
-            <span>NBA Data Hub</span>
+<div id="intro" class="intro" aria-label="开场演出">
+    <video src="{{ url_for('static', filename='img/youth/intro.mp4') }}" preload="auto" playsinline muted></video>
+    <span class="intro-grain" aria-hidden="true"></span>
+
+    <div class="intro-brand">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>Courtside<span class="brand-sub">NBA team operations</span></span>
+    </div>
+
+    <button type="button" class="intro-skip" data-intro-skip>跳过</button>
+
+    <div class="intro-loader" aria-hidden="true">
+        <span class="ball"></span>
+        <span class="label">Loading season</span>
+    </div>
+
+    <div class="intro-shoot">
+        <span class="intro-glow" aria-hidden="true"></span>
+        <button type="button" class="shoot-btn" data-intro-shoot aria-label="播放开场演出">
+            <span class="rings" aria-hidden="true"><span></span><span></span></span>
+            <span class="caption"><strong>SHOOT</strong><small>tap to play</small></span>
+        </button>
+        <div class="intro-caption">{{ season }} season · 点击开球，观看开场演出</div>
+    </div>
+
+    <div class="intro-progress" aria-hidden="true"><i></i></div>
+    <span class="intro-fade" aria-hidden="true"></span>
+</div>
+
+<main class="login-shell">
+    <section class="login-visual" data-pointer-parallax>
+        <div class="login-brand" data-depth="10">
+            <span class="brand-mark" aria-hidden="true">C</span>
+            <span>Courtside<span class="brand-sub">NBA team operations</span></span>
         </div>
-        <div class="login-subtitle mb-4">选择登录身份以进入对应工作台</div>
+        <div class="visual-copy">
+            <div class="hero-kicker" data-reveal style="--d:120ms">{{ season }} season · league operations</div>
+            <h1 data-reveal style="--d:180ms">比分、阵容与薪资，<br>都从一个工作台开始。</h1>
+            <p data-reveal style="--d:260ms">登录后按身份进入对应工作区：联赛运营、球队管理层或比赛日记分。</p>
+        </div>
+        <div class="visual-meta" data-reveal style="--d:340ms">
+            <div><div class="k">Teams</div><div class="v" data-countup="30">30</div></div>
+            <div><div class="k">Season</div><div class="v">{{ season }}</div></div>
+            <div><div class="k">Access</div><div class="v">3 roles</div></div>
+        </div>
+    </section>
+
+    <section class="login-panel" data-reveal="right" style="--d:200ms">
+        <div>
+            <div class="page-kicker">Sign in</div>
+            <h2>选择身份并登录</h2>
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} py-2 small" role="alert">{{ message }}</div>
+                    <div class="alert alert-{{ category }} py-2 small mb-0" role="alert">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        <form method="post" class="mb-4">
+        <form method="post" class="d-grid gap-3">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="next" value="{{ next_url }}">
-            <div class="row g-2 mb-3">
-                <div class="col-sm-4">
-                    <label class="role-choice">
-                        <input type="radio" name="role" value="management" checked>
-                        <span class="role-box">
-                            <i class="bi bi-briefcase"></i>
-                            管理层登录
-                        </span>
-                    </label>
-                </div>
-                <div class="col-sm-4">
-                    <label class="role-choice">
-                        <input type="radio" name="role" value="scorekeeper">
-                        <span class="role-box">
-                            <i class="bi bi-stopwatch"></i>
-                            记分员登录
-                        </span>
-                    </label>
-                </div>
-                <div class="col-sm-4">
-                    <label class="role-choice">
-                        <input type="radio" name="role" value="league_admin">
-                        <span class="role-box"><i class="bi bi-shield-check"></i>联赛管理员</span>
-                    </label>
-                </div>
+
+            <div class="role-grid">
+                <label class="role-choice">
+                    <input type="radio" name="role" value="management" checked>
+                    <span class="role-box">
+                        <i class="bi bi-briefcase"></i>
+                        管理层
+                    </span>
+                </label>
+                <label class="role-choice">
+                    <input type="radio" name="role" value="scorekeeper">
+                    <span class="role-box">
+                        <i class="bi bi-stopwatch"></i>
+                        记分员
+                    </span>
+                </label>
+                <label class="role-choice">
+                    <input type="radio" name="role" value="league_admin">
+                    <span class="role-box">
+                        <i class="bi bi-shield-check"></i>
+                        联赛管理员
+                    </span>
+                </label>
             </div>
 
-            <div class="mb-3">
-                <label for="username" class="form-label small">账号</label>
+            <div>
+                <label for="username" class="form-label">账号</label>
                 <input id="username" name="username" type="text" class="form-control" autocomplete="username" required autofocus>
             </div>
 
-            <div class="mb-4">
-                <label for="password" class="form-label small">密码</label>
+            <div>
+                <label for="password" class="form-label">密码</label>
                 <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
             </div>
 
-            <button type="submit" class="btn btn-primary w-100 py-2">
+            <button type="submit" class="btn btn-primary py-2">
                 <i class="bi bi-box-arrow-in-right me-1"></i>登录
             </button>
         </form>
 
-    </main>
+        <div class="login-foot">
+            <span>Courtside · v1</span>
+            <span>{{ season }}</span>
+        </div>
+    </section>
+</main>
+<script src="{{ url_for('static', filename='js/motion.js') }}"></script>
 </body>
 </html>

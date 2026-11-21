@@ -23,7 +23,7 @@
                 <option value="{{ player.id }}"{% if selected and player.id == selected.id %} selected{% endif %}>{{ player.name }} · {{ player.team_name }} ({{ player.abbreviation }})</option>
                 {% endfor %}
             </select>
-            <div class="small text-secondary" data-option-status="playerId" aria-live="polite"></div>
+            <div class="u-caps" data-option-status="playerId" aria-live="polite"></div>
         </div>
         <div class="col-sm-4 col-md-2">
             <label for="shotSeason" class="form-label">赛季</label>
@@ -48,10 +48,10 @@
     {% else %}
     <section class="shot-summary mb-4" aria-label="出手样本概况">
         {% set made = zones | map(attribute='made') | sum %}
-        <div><span class="small text-secondary">出手样本</span><strong>{{ total }} 次</strong></div>
-        <div><span class="small text-secondary">命中</span><strong>{{ made }} 次</strong></div>
-        <div><span class="small text-secondary">样本命中率</span><strong>{{ pct(100 * made / total) if total else "—" }}</strong></div>
-        <div><span class="small text-secondary">统计范围</span><strong class="shot-sample">{{ season }}{% if recent_count is not none %} · 近 {{ recent_count }} 场{% endif %}</strong></div>
+        <div><span class="u-caps">出手样本</span><strong>{{ total }} 次</strong></div>
+        <div><span class="u-caps">命中</span><strong>{{ made }} 次</strong></div>
+        <div><span class="u-caps">样本命中率</span><strong>{{ pct(100 * made / total) if total else "—" }}</strong></div>
+        <div><span class="u-caps">统计范围</span><strong class="shot-sample">{{ season }}{% if recent_count is not none %} · 近 {{ recent_count }} 场{% endif %}</strong></div>
     </section>
     {% if not total %}
     <p class="text-secondary">此范围暂无带位置的完赛出手。可以切换赛季或球员查看。</p>
@@ -66,7 +66,7 @@
                     {% endfor %}
                 </div>
             </div>
-            <p class="small text-secondary mb-3">{% if mode == "volume" %}颜色越深，区域出手占比越高。{% else %}以同赛季联盟各区命中率为基准，球员和联盟该区域都有出手就计算差值。{% endif %}点分区查看记录。</p>
+            <p class="u-caps mb-3">{% if mode == "volume" %}颜色越深，区域出手占比越高。{% else %}以同赛季联盟各区命中率为基准，球员和联盟该区域都有出手就计算差值。{% endif %}点分区查看记录。</p>
             <svg class="shot-court" viewBox="0 0 500 430" role="group" aria-label="可点击的半场投篮分区">
                 {% for zone in zones|reverse %}
                     {% set band = zone.volume_band if mode == "volume" else zone.efficiency_band %}
@@ -103,7 +103,7 @@
 
         <section class="shot-panel" aria-labelledby="zones-title">
             <h2 id="zones-title" class="h5 mb-2">分区数据</h2>
-            <p class="small text-secondary">联盟基准使用同赛季所有完赛记录。切换到最近比赛时，联盟基准保持一致。</p>
+            <p class="u-caps">联盟基准使用同赛季所有完赛记录。切换到最近比赛时，联盟基准保持一致。</p>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
                     <thead><tr><th scope="col">区域</th><th scope="col">命中/出手</th><th scope="col">球员</th><th scope="col">联盟</th><th scope="col">差值</th></tr></thead>
@@ -131,7 +131,7 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
             <div>
                 <h2 id="details-title" class="h5 mb-1">{{ focus.label }} · 出手明细</h2>
-                <p class="small text-secondary mb-0">分区共 {{ focus.attempts }} 次出手{% if outcome != "all" %} · 当前筛选 {{ detail_count }} 次{% endif %}</p>
+                <p class="u-caps mb-0">分区共 {{ focus.attempts }} 次出手{% if outcome != "all" %} · 当前筛选 {{ detail_count }} 次{% endif %}</p>
             </div>
             <div class="btn-group btn-group-sm" role="group" aria-label="出手结果筛选">
                 {% for key, label in [('all','全部'), ('made','命中'), ('missed','未中')] %}
@@ -147,7 +147,7 @@
                 <tbody>
                     {% for shot in shots %}
                     <tr>
-                        <th scope="row">{{ shot.team_name }} 对 {{ shot.opponent_name }} <span class="small text-secondary fw-normal">{{ shot.game_date }}</span></th>
+                        <th scope="row">{{ shot.team_name }} 对 {{ shot.opponent_name }} <span class="u-caps fw-normal">{{ shot.game_date }}</span></th>
                         <td>{% if shot.period <= 4 %}第 {{ shot.period }} 节{% else %}加时 {{ shot.period - 4 }}{% endif %} · 剩余 {{ "%d:%02d"|format(shot.seconds_remaining // 60, shot.seconds_remaining % 60) }}</td>
                         <td>{{ "命中" if shot.made else "未中" }}</td>
                         <td>

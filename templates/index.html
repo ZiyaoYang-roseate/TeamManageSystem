@@ -1,170 +1,230 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
 
-{% block title %}数据总览 - NBA 球队管理系统{% endblock %}
+{% block title %}数据总览 - Courtside{% endblock %}
 
 {% block content %}
-<div class="page-heading mb-4">
-    <h1 class="h3 mb-1">数据总览</h1>
-    <div class="text-secondary small">球队战绩、得分王与效率榜</div>
-</div>
+{% set leader = standings[0] if standings else None %}
+{% set finished = snapshot.games_finished if snapshot and snapshot.games_finished else 0 %}
 
-<div class="row g-3 mb-4">
-    <div class="col-6 col-xl-3">
-        <div class="card metric-card h-100">
-            <div class="card-body py-3">
-                <div class="text-secondary small">球队数量</div>
-                <div class="h3 mb-0">{{ standings | length }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="card metric-card h-100">
-            <div class="card-body py-3">
-                <div class="text-secondary small">战绩领跑球队</div>
-                <div class="h5 mb-0">{{ standings[0].name if standings else "-" }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="card metric-card h-100">
-            <div class="card-body py-3">
-                <div class="text-secondary small">场均得分王</div>
-                <div class="h5 mb-0">{{ scorers[0].name if scorers else "-" }}</div>
-                <div class="small text-primary">{{ scorers[0].ppg if scorers else "0" }} 分</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="card metric-card h-100">
-            <div class="card-body py-3">
-                <div class="text-secondary small">效率榜第一</div>
-                <div class="h5 mb-0">{{ efficient_players[0].name if efficient_players else "-" }}</div>
-                <div class="small text-primary">{{ efficient_players[0].efficiency if efficient_players else "0" }}</div>
-            </div>
-        </div>
-    </div>
-</div>
+{% call ui.page_head('League pulse · ' ~ season, '联盟脉搏', '球队战绩、当晚比分与个人表现，一屏掌握联盟格局。') %}
+  <a class="btn btn-outline-secondary btn-sm magnet" href="{{ url_for('league_dashboard', season=season) }}">
+    <i class="bi bi-bar-chart-line me-1"></i>联赛运营台
+  </a>
+  <a class="btn btn-primary btn-sm btn-sheen magnet" href="{{ url_for('games', season=season) }}">
+    <i class="bi bi-calendar3 me-1"></i>全部赛程
+  </a>
+{% endcall %}
 
-<section class="mb-4">
-    <h2 class="h6 mb-3">球队战绩排名</h2>
-    <div class="card shadow-sm">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th scope="col">排名</th>
-                        <th scope="col">球队</th>
-                        <th scope="col">场次</th>
-                        <th scope="col">胜</th>
-                        <th scope="col">负</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="胜场数 / 总场次">胜率</th>
-                        <th scope="col">场均得分</th>
-                        <th scope="col">场均失分</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in standings %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td class="text-nowrap">
-                            <span class="fw-semibold">{{ row.name }}</span>
-                            <span class="text-secondary">({{ row.abbreviation }})</span>
-                        </td>
-                        <td>{{ row.games_played }}</td>
-                        <td>{{ row.wins }}</td>
-                        <td>{{ row.games_played - row.wins }}</td>
-                        <td>
-                            {% if row.games_played %}
-                            <span class="badge {{ 'text-bg-success' if row.wins >= row.games_played / 2 else 'text-bg-danger' }}">
-                                {{ ((row.wins / row.games_played) * 100) | round(1) }}%
-                            </span>
-                            {% else %}
-                            <span class="badge text-bg-secondary">0%</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ (row.points_for / row.games_played) | round(1) if row.games_played else '-' }}</td>
-                        <td>{{ (row.points_against / row.games_played) | round(1) if row.games_played else '-' }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="8" class="text-center text-muted py-4">暂无战绩数据</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+<section class="hero hero-stage mb-3" data-pointer-parallax data-reveal="zoom">
+  <div class="hero-court" data-parallax="0.06" data-depth="14" aria-hidden="true"></div>
+  <div class="hero-kicker" data-depth="4">{{ season }} regular season · 30 teams</div>
+  <h2 class="hero-title" data-depth="8">比分、排名与效率，<br>读成一条完整的故事线。</h2>
+  <p class="hero-sub">
+    当轮比分、球队战绩、得分与效率领跑者——所有关键数字都在同一套视觉语言里呈现。
+  </p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="label">已完赛</div>
+      <div class="value" data-countup="{{ finished }}">{{ finished }}</div>
     </div>
+    <div class="hero-stat">
+      <div class="label">场均总分</div>
+      <div class="value" data-countup="{{ snapshot.avg_total | default(0) }}" data-decimals="1">{{ snapshot.avg_total | n1 }}</div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">主场场均</div>
+      <div class="value" data-countup="{{ snapshot.avg_home | default(0) }}" data-decimals="1">{{ snapshot.avg_home | n1 }}</div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">领跑球队</div>
+      <div class="value">{{ leader.name if leader else '-' }}</div>
+    </div>
+  </div>
 </section>
 
-<div class="row g-4">
-    <div class="col-lg-6">
-        <h2 class="h6 mb-3">场均得分榜</h2>
-        <div class="card shadow-sm h-100">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th scope="col">排名</th>
-                            <th scope="col">球员</th>
-                            <th scope="col">球队</th>
-                            <th scope="col">场次</th>
-                            <th scope="col">场均</th>
-                            <th scope="col">总分</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for player in scorers %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td class="text-nowrap fw-semibold">{{ player.name }}</td>
-                            <td>{{ player.abbreviation }}</td>
-                            <td>{{ player.games_played }}</td>
-                            <td class="fw-semibold text-success">{{ player.ppg }}</td>
-                            <td>{{ player.total_points }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-4">暂无球员数据</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+<section class="mb-4" aria-label="关键指标">
+  <div class="kpi-grid">
+    <div data-reveal style="--d:0ms">{{ ui.kpi('参赛球队', standings | length, foot='东西部共 30 支') }}</div>
+    <div data-reveal style="--d:60ms">{{ ui.kpi('已完赛', finished, foot='场次 · ' ~ season) }}</div>
+    <div data-reveal style="--d:120ms">{{ ui.kpi('场均总分', snapshot.avg_total | n1, delta='联盟进攻节奏') }}</div>
+    <div data-reveal style="--d:180ms">{{ ui.kpi('场均分差', (snapshot.avg_home * 2 - snapshot.avg_total) | abs | n1 if snapshot.avg_total else '-', foot='主队净胜分') }}</div>
+    <div data-reveal style="--d:240ms">{{ ui.kpi('战绩领跑', leader.abbreviation if leader else '-', delta=(leader.wins ~ '胜 ' ~ (leader.games_played - leader.wins) ~ '负') if leader else None, foot=leader.name if leader else '') }}</div>
+  </div>
+</section>
+
+{% if recent_games %}
+<section class="mb-4" aria-label="最近比赛" data-reveal>
+  <div class="section-head">
+    <div>
+      <h2 class="section-title">最近比赛</h2>
+      <div class="section-sub">按比赛日倒序 · 点按卡片弹出赛程详情，或进入完整技术统计</div>
+    </div>
+    <a class="btn btn-link btn-sm text-decoration-none" href="{{ url_for('games', season=season) }}">
+      全部赛程 <i class="bi bi-arrow-right ms-1"></i>
+    </a>
+  </div>
+  <div class="game-strip">
+    {% for game in recent_games %}
+    {% set home_won = game.home_score >= game.away_score %}
+    {% set payload = {
+      'kicker': 'Game ' ~ game.id,
+      'status': game.status,
+      'date': (game.game_date | md) ~ ' · ' ~ (game.game_date | weekday),
+      'season': season,
+      'home_score': game.home_score,
+      'away_score': game.away_score,
+      'margin': (game.home_score - game.away_score) | abs,
+      'home': {'name': game.home_team_name, 'abbr': game.home_team_abbr},
+      'away': {'name': game.away_team_name, 'abbr': game.away_team_abbr},
+      'href': url_for('game_detail', game_id=game.id),
+      'play_by_play': url_for('play_by_play', game_id=game.id)
+    } %}
+    <a class="game-card magnet" href="{{ url_for('game_detail', game_id=game.id) }}" data-game="{{ payload | tojson | forceescape }}">
+      <div class="gc-top">
+        <span>{{ game.game_date | md }} · {{ game.game_date | weekday }}</span>
+        {% if game.status == 'live' %}
+        <span class="badge-live">进行中</span>
+        {% else %}
+        <span>已完赛</span>
+        {% endif %}
+      </div>
+      <div class="gc-row {{ 'is-loser' if home_won and game.away_score != game.home_score else '' }}">
+        <span class="abbr">{{ game.away_team_abbr }}</span>
+        <span class="team-name">{{ game.away_team_name }}</span>
+        <span class="score">{{ game.away_score }}</span>
+      </div>
+      <div class="gc-row {{ 'is-loser' if not home_won and game.away_score != game.home_score else '' }}">
+        <span class="abbr">{{ game.home_team_abbr }}</span>
+        <span class="team-name">{{ game.home_team_name }}</span>
+        <span class="score">{{ game.home_score }}</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="row g-3 g-xl-4">
+  <div class="col-12 col-xl-7" data-reveal="left">
+    <div class="panel h-100">
+      {% call ui.panel_head('球队战绩排名', '按胜场与净胜分排序 · ' ~ season) %}
+        <span class="u-muted">{{ standings | length }} 支球队</span>
+      {% endcall %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th class="cell-tight">#</th>
+              <th>球队</th>
+              <th class="num">场</th>
+              <th class="num">胜</th>
+              <th class="num">负</th>
+              <th class="num" data-bs-toggle="tooltip" title="胜场数 / 总场次">胜率</th>
+              <th class="num">场均得</th>
+              <th class="num">场均失</th>
+              <th class="num">净胜</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in standings %}
+            {% set losses = row.games_played - row.wins %}
+            {% set win_rate = (row.wins / row.games_played) if row.games_played else 0 %}
+            {% set diff = (row.points_for - row.points_against) / row.games_played if row.games_played else 0 %}
+            <tr>
+              <td class="rank-cell">{{ '%02d' | format(loop.index) }}</td>
+              <td>
+                <a class="team-cell text-reset text-decoration-none" href="{{ url_for('team_detail', team_id=row.id) }}">
+                  {{ ui.team_badge(row.abbreviation) }}
+                  <span class="min-w-0">
+                    <span class="name d-block">{{ row.name }}</span>
+                    <span class="sub">{{ row.city }}</span>
+                  </span>
+                </a>
+              </td>
+              <td class="num text-end">{{ row.games_played }}</td>
+              <td class="num text-end">{{ row.wins }}</td>
+              <td class="num text-end">{{ losses }}</td>
+              <td class="num text-end">
+                <span class="badge {{ 'text-bg-success' if win_rate >= 0.5 else 'text-bg-danger' }}">
+                  {{ win_rate | pct1 }}
+                </span>
+              </td>
+              <td class="num text-end">{{ (row.points_for / row.games_played) | n1 if row.games_played else '-' }}</td>
+              <td class="num text-end">{{ (row.points_against / row.games_played) | n1 if row.games_played else '-' }}</td>
+              <td class="num text-end {{ 'text-success' if diff > 0 else ('text-danger' if diff < 0 else 'u-muted') }}">
+                {{ diff | signed1 }}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9">{{ ui.empty('inbox', '暂无战绩数据', '完成一场比赛后这里会自动汇总排名。') }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-5" data-reveal="right">
+    <div class="panel mb-3">
+      {% call ui.panel_head('场均得分榜', 'PPG · 前 8 名') %}
+        <a class="btn btn-link btn-sm text-decoration-none p-0" href="{{ url_for('analytics', season=season) }}">完整榜单</a>
+      {% endcall %}
+      <div class="leader-list">
+        {% for player in scorers[:8] %}
+        <a class="leader-row" href="{{ url_for('player_detail', player_id=player.id) }}">
+          <span class="leader-rank">{{ loop.index }}</span>
+          <span class="min-w-0">
+            <span class="leader-name d-block">{{ player.name }}</span>
+            <span class="leader-meta">{{ player.abbreviation }} · {{ player.games_played }} 场</span>
+          </span>
+          <span class="leader-val">{{ player.ppg }}<small>分</small></span>
+        </a>
+        {% else %}
+        {{ ui.empty('person-x', '暂无球员数据') }}
+        {% endfor %}
+      </div>
     </div>
 
-    <div class="col-lg-6">
-        <h2 class="h6 mb-3">球员效率榜</h2>
-        <div class="card shadow-sm h-100">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th scope="col">排名</th>
-                            <th scope="col">球员</th>
-                            <th scope="col">球队</th>
-                            <th scope="col">场次</th>
-                            <th scope="col" data-bs-toggle="tooltip" title="得分 + 篮板 + 助攻 + 抢断 + 盖帽 - 投失 - 失误">效率值</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for player in efficient_players %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td class="text-nowrap fw-semibold">{{ player.name }}</td>
-                            <td>{{ player.abbreviation }}</td>
-                            <td>{{ player.games_played }}</td>
-                            <td class="fw-semibold text-primary">{{ player.efficiency }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">暂无效率数据</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+    <div class="panel">
+      {% call ui.panel_head('球员效率榜', '得分 + 篮板 + 助攻 + 抢断 + 盖帽 − 投失 − 失误') %}
+        <span class="u-muted">前 8</span>
+      {% endcall %}
+      <div class="leader-list">
+        {% for player in efficient_players[:8] %}
+        <a class="leader-row" href="{{ url_for('player_detail', player_id=player.id) }}">
+          <span class="leader-rank">{{ loop.index }}</span>
+          <span class="min-w-0">
+            <span class="leader-name d-block">{{ player.name }}</span>
+            <span class="leader-meta">{{ player.abbreviation }} · {{ player.games_played }} 场</span>
+          </span>
+          <span class="leader-val">{{ player.efficiency }}</span>
+        </a>
+        {% else %}
+        {{ ui.empty('graph-up', '暂无效率数据') }}
+        {% endfor %}
+      </div>
     </div>
+  </div>
 </div>
+
+<section class="panel mt-3 mt-xl-4" aria-label="赛季瞬间" data-reveal>
+  {% call ui.panel_head('赛季瞬间', '球场边的高光片段 · 点按任意画面放大查看') %}
+    <span class="u-muted u-caps">Season gallery</span>
+  {% endcall %}
+  <div class="panel-body">
+    <div class="gallery-grid">
+      {% set frames = ['0004','0008','0012','0016','0020','0024','0028','0032','0036','0040','0044','0049','0053','0057','0061','0065'] %}
+      {% for frame in frames %}
+      <button type="button" class="gallery-item" data-gallery-item
+              data-src="{{ url_for('static', filename='img/gallery/frame_' ~ frame ~ '.jpg') }}"
+              data-label="Frame {{ frame }}" aria-label="查看第 {{ loop.index }} 张赛季图片">
+        <img src="{{ url_for('static', filename='img/gallery/frame_' ~ frame ~ '.jpg') }}"
+             alt="赛季瞬间 {{ loop.index }}" loading="lazy" decoding="async">
+        <span class="gi-label">Frame {{ frame }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</section>
 {% endblock %}

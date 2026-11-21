@@ -5,8 +5,8 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h3 mb-1">实时比赛计分面板</h1>
-        <div class="text-secondary small" id="gameDate">
+        <h1 class="page-title mb-1">实时比赛计分面板</h1>
+        <div class="u-caps" id="gameDate">
             {{ game.game_date }} · {{ game.season }} 赛季
         </div>
     </div>
@@ -35,7 +35,7 @@
     </div>
 </div>
 
-<div class="alert {{ 'alert-success' if date_relation == 'today' else ('alert-warning' if date_relation == 'future' else 'alert-secondary') }} d-flex flex-wrap justify-content-between align-items-center gap-2" role="alert">
+<div class="alert {{ 'alert-success' if date_relation == 'today' else ('alert-warning' 'future' 'alert-secondary') }} d-flex flex-wrap justify-content-between align-items-center gap-2" role="alert">
     <div>
         <span class="fw-semibold">系统比赛日：{{ business_date }}</span>
         <span class="ms-2">{{ '该场比赛属于当前比赛日' if date_relation == 'today' else date_message }}</span>
@@ -47,11 +47,11 @@
     {% endif %}
 </div>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-body py-4">
+<div class="panel mb-4">
+    <div class="panel-body py-4">
         <div class="row align-items-center text-center g-3">
             <div class="col-5">
-                <div class="text-secondary small text-uppercase" id="homeTeamName">
+                <div class="u-caps text-uppercase" id="homeTeamName">
                     {{ game.home_team_name }}
                 </div>
                 <div class="display-3 fw-bold score-value" id="homeScore">{{ game.home_score }}</div>
@@ -67,7 +67,7 @@
                 </button>
             </div>
             <div class="col-5">
-                <div class="text-secondary small text-uppercase" id="awayTeamName">
+                <div class="u-caps text-uppercase" id="awayTeamName">
                     {{ game.away_team_name }}
                 </div>
                 <div class="display-3 fw-bold score-value" id="awayScore">{{ game.away_score }}</div>
@@ -83,10 +83,10 @@
 
 <div class="row g-4">
     <div class="col-xl-6">
-        <section class="card shadow-sm h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <section class="panel h-100">
+            <div class="panel-head d-flex justify-content-between align-items-center">
                 <span class="fw-semibold" id="homeRosterTitle">{{ game.home_team_name }}</span>
-                <span class="small text-secondary">{{ game.home_team_abbr }}</span>
+                <span class="u-caps">{{ game.home_team_abbr }}</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0">
@@ -112,10 +112,10 @@
     </div>
 
     <div class="col-xl-6">
-        <section class="card shadow-sm h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <section class="panel h-100">
+            <div class="panel-head d-flex justify-content-between align-items-center">
                 <span class="fw-semibold" id="awayRosterTitle">{{ game.away_team_name }}</span>
-                <span class="small text-secondary">{{ game.away_team_abbr }}</span>
+                <span class="u-caps">{{ game.away_team_abbr }}</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0">
@@ -141,10 +141,10 @@
     </div>
 </div>
 
-<section class="card shadow-sm mt-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<section class="panel mt-4">
+    <div class="panel-head d-flex justify-content-between align-items-center">
         <span class="fw-semibold">事件流</span>
-        <span class="small text-secondary">最新事件优先</span>
+        <span class="u-caps">最新事件优先</span>
     </div>
     <div class="table-responsive">
         <table class="table table-sm table-hover align-middle mb-0">
@@ -185,7 +185,7 @@
                         <circle id="shotLocationMarker" r="8" fill="#ffeb3b" stroke="#111" stroke-width="2" hidden></circle>
                     </svg>
                 </div>
-                <div id="shotLocationInfo" class="small text-secondary mt-2">点击球场选择位置</div>
+                <div id="shotLocationInfo" class="u-caps mt-2">点击球场选择位置</div>
                 <div class="small text-muted mt-1">两分球只能选择三分线内；三分球只能选择三分线外。</div>
             </div>
             <div class="modal-footer">
@@ -325,7 +325,7 @@
             const nameCell = document.createElement("td");
             nameCell.className = "text-nowrap";
             nameCell.innerHTML = `<div class="fw-semibold">${escapeHtml(player.name)}</div>`;
-            nameCell.innerHTML += `<div class="small text-secondary">${escapeHtml(player.position)} · #${player.jersey_number}</div>`;
+            nameCell.innerHTML += `<div class="u-caps">${escapeHtml(player.position)} · #${player.jersey_number}</div>`;
 
             const statCells = ["minutes_played", "points", "rebounds", "assists", "steals", "blocks", "turnovers", "fouls"]
                 .map((field) => {
@@ -807,22 +807,24 @@
         letter-spacing: 0;
     }
     .score-action {
-        min-width: 42px;
+        min-width: 38px;
+        padding: 2px 5px;
+        font-size: 11px;
     }
     .table th,
     .table td {
         white-space: nowrap;
     }
     .card-header {
-        background: rgba(255, 255, 255, 0.03);
-        border-bottom: 1px solid var(--card-border);
+        background: var(--surface-3);
+        border-bottom: 1px solid var(--line);
     }
     .shot-location-court svg {
         width: 100%;
         height: auto;
         cursor: crosshair;
-        border-radius: 8px;
-        background: #c58b4a;
+        border-radius: var(--r-md);
+        background: #121216;
     }
     .shot-court-bg {
         fill: transparent;

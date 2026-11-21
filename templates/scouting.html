@@ -2,23 +2,41 @@
 {% block title %}选秀准备{% endblock %}
 {% block content %}
 <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
-    <div><h1 class="h3 mb-1">选秀准备</h1><span class="text-secondary">本队选秀板</span></div>
-    <form method="get" class="d-flex gap-2 align-items-end">
-        <input type="hidden" name="season" value="{{ season }}">
-        <div>
-            <label class="form-label" for="draftYear">选秀年份</label>
-            <select class="form-select" name="year" id="draftYear">
-                {% for year in workspace.years %}<option value="{{ year }}"{% if year == workspace.year %} selected{% endif %}>{{ year }}</option>{% endfor %}
-            </select>
-        </div>
-        <button class="btn btn-outline-secondary">切换</button>
-    </form>
+    <div><h1 class="page-title mb-1">选秀准备</h1><span class="text-secondary">{% if readonly %}只读查看{% else %}本队选秀板{% endif %}</span></div>
+    <div class="d-flex flex-wrap gap-2 align-items-end">
+        {% if readonly and teams %}
+        <form method="get" class="d-flex gap-2 align-items-end">
+            <input type="hidden" name="season" value="{{ season }}">
+            {% if workspace.year %}<input type="hidden" name="year" value="{{ workspace.year }}">{% endif %}
+            <div>
+                <label class="form-label" for="scoutTeam">查看球队</label>
+                <select class="form-select" name="team_id" id="scoutTeam" onchange="this.form.submit()">
+                    {% for item in teams %}
+                    <option value="{{ item.id }}"{% if item.id == current_team_id %} selected{% endif %}>{{ item.city }}{{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-outline-secondary">切换球队</button>
+        </form>
+        {% endif %}
+        <form method="get" class="d-flex gap-2 align-items-end">
+            <input type="hidden" name="season" value="{{ season }}">
+            {% if readonly %}<input type="hidden" name="team_id" value="{{ current_team_id }}">{% endif %}
+            <div>
+                <label class="form-label" for="draftYear">选秀年份</label>
+                <select class="form-select" name="year" id="draftYear">
+                    {% for year in workspace.years %}<option value="{{ year }}"{% if year == workspace.year %} selected{% endif %}>{{ year }}</option>{% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-outline-secondary">切换</button>
+        </form>
+    </div>
 </header>
 
 <section class="row g-3 mb-4">
     <div class="col-md-6">
         <h2 class="h5">本队补强依据</h2>
-        <div>比赛数据关注项：{{ workspace.priorities | join('、') or "暂无明确短板" }} <span class="text-secondary small">（{{ season }} 赛季 {{ workspace.games }} 场对照样本）</span></div>
+        <div>比赛数据关注项：{{ workspace.priorities | join('、') or "暂无明确短板" }} <span class="u-caps">（{{ season }} 赛季 {{ workspace.games }} 场对照样本）</span></div>
         <div>选秀前到期合同：{% for item in workspace.expiring %}{{ item.position }} {{ item.total }} 人{% if not loop.last %} · {% endif %}{% else %}暂无{% endfor %}</div>
         <a class="small" href="{{ url_for('salary', season=season) }}">查看逐年合同</a>
     </div>
@@ -27,7 +45,7 @@
         {% for pick in workspace.picks %}
         <div>{{ "首轮" if pick.round == 1 else "次轮" }} · {{ {"Own": "持有", "Traded": "已交易"}.get(pick.status, pick.status) }} · {{ pick.protection }}{% if workspace.draft_order and pick.status == "Own" %} · 参考第 {{ workspace.draft_order.placement + (pick.round - 1) * workspace.draft_order.teams_count }} 顺位{% endif %}</div>
         {% else %}<div class="text-secondary">该届暂无本队签位记录。</div>{% endfor %}
-        {% if workspace.picks %}<span class="text-secondary small">参考顺位按对应赛季完赛胜率从低到高估算，同胜率按球队编号排列；正式顺位待发布。</span>{% endif %}
+        {% if workspace.picks %}<span class="u-caps">参考顺位按对应赛季完赛胜率从低到高估算，同胜率按球队编号排列；正式顺位待发布。</span>{% endif %}
     </div>
 </section>
 
@@ -45,36 +63,36 @@
     {% else %}<p class="text-secondary">从候选池加入首选和备选，设置优先顺序与预期角色。</p>{% endif %}
 </section>
 
-<section class="card card-body mb-4" id="draft-assistant">
-    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center"><div><h2 class="h5">选秀智能辅助</h2><p class="small text-secondary mb-0">无需勾选：结合本队短板、到期合同和外部赛事档案，推荐三名优先考察对象。</p></div>
-    <form method="post" action="{{ url_for('scouting',season=season) }}#draft-assistant"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="year" value="{{ workspace.year }}"><button class="btn btn-primary" name="action" value="recommend">AI 推荐候选人</button></form></div>
+<section class="panel panel-body mb-4" id="draft-assistant">
+    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center"><div><h2 class="h5">选秀智能辅助</h2><p class="u-caps mb-0">无需勾选：结合本队短板、到期合同和外部赛事档案，推荐三名优先考察对象。</p></div>
+    {% if not readonly %}<form method="post" action="{{ url_for('scouting',season=season) }}#draft-assistant"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="year" value="{{ workspace.year }}"><button class="btn btn-primary" name="action" value="recommend">AI 推荐候选人</button></form>{% endif %}</div>
     {% if recommendations %}
-    <p class="small text-secondary mt-3">{{ 'AI 整理' if recommendations.source=='model' else '规则整理' }} · {{ recommendations.message }}</p>
+    <p class="u-caps mt-3">{{ 'AI 整理' if recommendations.source=='model' else '规则整理' }} · {{ recommendations.message }}</p>
     <div class="row g-3">{% for item in recommendations.candidates %}<div class="col-xl-4"><article class="border rounded p-3 h-100">
-        <h3 class="h6">{{ loop.index }} · {{ item.name }} · {{ item.position }}</h3><p class="small text-secondary">{{ item.profile.source }} · {{ item.games }} 场 · 场均 {{ item.minutes }} 分钟{% if not item.supported %} · 样本有限{% endif %}</p>
+        <h3 class="h6">{{ loop.index }} · {{ item.name }} · {{ item.position }}</h3><p class="u-caps">{{ item.profile.source }} · {{ item.games }} 场 · 场均 {{ item.minutes }} 分钟{% if not item.supported %} · 样本有限{% endif %}</p>
         <p>{{ item.reason }}</p><p class="small">外部每36分钟：助攻 {{ item.rates.assists }} · 篮板 {{ item.rates.rebounds }} · 三分 {{ item.rates.threes }} · 失误 {{ item.rates.turnovers }}</p>
         {% for key,label in [('strength','技术特点'),('role','预期用法'),('risk','适应风险'),('test','试训重点')] %}<p class="small mb-2"><strong>{{ label }}</strong> {{ item.profile.fields[key] }}</p>{% endfor %}
         <p class="small"><strong>优先核对</strong> {{ item.focus }}</p>
         {% if item.priority %}<span class="badge text-bg-secondary">已在本队选秀板 · 第 {{ item.priority }} 位</span>{% else %}
-        <form method="post" action="{{ url_for('scouting',season=season) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="year" value="{{ workspace.year }}"><input type="hidden" name="prospect_id" value="{{ item.id }}"><input type="hidden" name="role_note" value="{{ item.profile.fields.role[:120] }}"><button class="btn btn-sm btn-outline-primary" name="action" value="save">加入本队选秀板</button></form>{% endif %}
+        {% if not readonly %}<form method="post" action="{{ url_for('scouting',season=season) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="year" value="{{ workspace.year }}"><input type="hidden" name="prospect_id" value="{{ item.id }}"><input type="hidden" name="role_note" value="{{ item.profile.fields.role[:120] }}"><button class="btn btn-sm btn-outline-primary" name="action" value="save">加入本队选秀板</button></form>{% endif %}{% endif %}
     </article></div>{% endfor %}</div>
-    <p class="small text-secondary mt-3 mb-0">外部数据只用于初筛，需通过录像和试训验证能否适应本联赛；不代表加盟后的统计预测。</p>
+    <p class="u-caps mt-3 mb-0">外部数据只用于初筛，需通过录像和试训验证能否适应本联赛；不代表加盟后的统计预测。</p>
     {% endif %}
 </section>
 
 {% if comparison %}
 <section id="comparison" class="border rounded p-3 mb-4">
     <h2 class="h5">候选比较 · {{ "AI 整理" if comparison.source == "model" else "规则整理" }}</h2>
-    <p class="small text-secondary">本队需要和候选表现使用不同数据源。每 36 分钟指标只用于初筛，试训再确认能力能否转化。</p>
+    <p class="u-caps">本队需要和候选表现使用不同数据源。每 36 分钟指标只用于初筛，试训再确认能力能否转化。</p>
     <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
             <thead><tr><th>候选与外部样本</th>{% if comparison.axis %}<th>{{ comparison.axis }}</th>{% endif %}<th>到队用法与验证</th></tr></thead>
             <tbody>
                 {% for item in comparison.candidates %}
                 <tr><th scope="row"><strong>{{ item.name }} · {{ item.position }}</strong><div class="small fw-normal">{{ item.source }} · {{ item.games }} 场、场均 {{ item.minutes }} 分钟</div></th>
-                    {% if comparison.axis %}<td>{{ item.rate if item.rate is not none else "待补资料" }}{% if not item.supported and item.rate is not none %}<div class="small text-secondary">小样本</div>{% endif %}</td>{% endif %}
+                    {% if comparison.axis %}<td>{{ item.rate if item.rate is not none else "待补资料" }}{% if not item.supported and item.rate is not none %}<div class="u-caps">小样本</div>{% endif %}</td>{% endif %}
                     <td>{% if item.fields.role %}<div>{{ item.fields.role }}</div>{% endif %}
-                        <div class="small text-secondary">{{ item.readout }}</div>
+                        <div class="u-caps">{{ item.readout }}</div>
                         {% if item.fields.test %}<div class="small mt-1"><strong>试训</strong> {{ item.fields.test }}</div>{% endif %}
                         {% if item.focus %}<div class="small mt-1"><strong>优先核对</strong> {{ item.focus }}</div>{% endif %}
                     </td>
@@ -88,21 +106,23 @@
 
 <h2 class="h5">候选池</h2>
 {% if workspace.prospects %}
+{% if not readonly %}
 <form method="post" action="{{ url_for('scouting', season=season, year=workspace.year) }}#comparison" id="compareProspects" class="mb-3">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="year" value="{{ workspace.year }}">
     <button class="btn btn-outline-primary" name="action" value="compare">比较勾选的候选人</button>
-    <span class="small text-secondary ms-2">选择 2 至 3 名</span>
+    <span class="u-caps ms-2">选择 2 至 3 名</span>
 </form>
+{% endif %}
 <div class="row row-cols-1 row-cols-xl-2 g-3">
     {% for item in workspace.prospects %}
     <div class="col">
-        <article class="card card-body h-100">
+        <article class="panel panel-body h-100">
             <label for="prospect-{{ item.id }}" class="h6">
                 <input class="form-check-input me-2" id="prospect-{{ item.id }}" form="compareProspects" type="checkbox" name="candidate" value="{{ item.id }}"{% if comparison and item.id in comparison.selected %} checked{% endif %}>
                 {{ item.name }} · {{ item.position }}
             </label>
-            <p class="small text-secondary mb-1">{{ item.profile.source }} · {{ item.games }} 场 · 场均 {{ item.minutes }} 分钟</p>
+            <p class="u-caps mb-1">{{ item.profile.source }} · {{ item.games }} 场 · 场均 {{ item.minutes }} 分钟</p>
             <p class="small mb-1">场均助攻 {{ item.assists }} / 失误 {{ item.turnovers }} / 篮板 {{ item.rebounds }} / 三分命中 {{ item.threes }}</p>
             {% if item.profile.external %}
             <dl class="small mb-3">
@@ -111,8 +131,9 @@
                 {% endfor %}
             </dl>
             {% else %}
-            <p class="small text-secondary">外部样本出处或球探档案待补齐。{{ item.profile.legacy_note }}</p>
+            <p class="u-caps">外部样本出处或球探档案待补齐。{{ item.profile.legacy_note }}</p>
             {% endif %}
+            {% if not readonly %}
             <form method="post" action="{{ url_for('scouting', season=season, year=workspace.year) }}">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="year" value="{{ workspace.year }}">
@@ -132,6 +153,7 @@
                 <button class="btn btn-primary btn-sm" name="action" value="save">{{ "保存选秀板记录" if item.priority else "加入本队选秀板" }}</button>
                 {% if item.priority %}<button class="btn btn-outline-danger btn-sm" name="action" value="remove" formnovalidate>移除</button>{% endif %}
             </form>
+            {% endif %}
         </article>
     </div>
     {% endfor %}

@@ -18,8 +18,8 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
-        <h1 class="h3 mb-1">交易收发记录</h1>
-        <div class="text-secondary small">
+        <h1 class="page-title mb-1">交易收发记录</h1>
+        <div class="u-caps">
             {{ current_user.team_city }} {{ current_user.team_name }} ({{ current_user.team_abbreviation }})
         </div>
     </div>
@@ -30,20 +30,20 @@
 
 <div class="row g-4 mb-4">
     <div class="col-md-4">
-        <div class="card shadow-sm"><div class="card-body">
-            <div class="text-secondary small">待我处理</div>
+        <div class="panel"><div class="panel-body">
+            <div class="u-caps">待我处理</div>
             <div class="h3 mb-0">{{ received_proposals | selectattr('status', 'equalto', 'pending') | list | length }}</div>
         </div></div>
     </div>
     <div class="col-md-4">
-        <div class="card shadow-sm"><div class="card-body">
-            <div class="text-secondary small">等待对方</div>
+        <div class="panel"><div class="panel-body">
+            <div class="u-caps">等待对方</div>
             <div class="h3 mb-0">{{ sent_proposals | selectattr('status', 'equalto', 'pending') | list | length }}</div>
         </div></div>
     </div>
     <div class="col-md-4">
-        <div class="card shadow-sm"><div class="card-body">
-            <div class="text-secondary small">全部交易方案</div>
+        <div class="panel"><div class="panel-body">
+            <div class="u-caps">全部交易方案</div>
             <div class="h3 mb-0">{{ proposals | length }}</div>
         </div></div>
     </div>
@@ -54,23 +54,23 @@
     <div class="row g-3">
         {% for proposal in received_proposals %}
         <div class="col-12">
-            <div class="card shadow-sm {{ 'border-warning' if proposal.status == 'pending' else '' }}">
-                <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="panel {{ 'border-warning' if proposal.status == 'pending' else '' }}">
+                <div class="panel-head bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <div>
                         <span class="fw-semibold">来自 {{ proposal.proposer_city }} {{ proposal.proposer_name }}</span>
-                        <span class="text-secondary small ms-2">{{ proposal.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                        <span class="u-caps ms-2">{{ proposal.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                     </div>
                     {{ status_badge(proposal.status) }}
                 </div>
-                <div class="card-body">
+                <div class="panel-body">
                     <div class="row g-3 align-items-center">
                         <div class="col-md-5">
-                            <div class="text-secondary small mb-2">对方送出</div>
+                            <div class="u-caps mb-2">对方送出</div>
                             {{ player_badges(proposal.proposer_players, 'success') }}
                         </div>
                         <div class="col-md-2 text-center text-secondary"><i class="bi bi-arrow-left-right fs-4"></i></div>
                         <div class="col-md-5">
-                            <div class="text-secondary small mb-2">希望我方送出</div>
+                            <div class="u-caps mb-2">希望我方送出</div>
                             {{ player_badges(proposal.receiver_players, 'danger') }}
                         </div>
                     </div>
@@ -92,7 +92,7 @@
             </div>
         </div>
         {% else %}
-        <div class="col-12"><div class="card"><div class="card-body text-center text-muted py-5">暂无收到的交易方案</div></div></div>
+        <div class="col-12"><div class="panel"><div class="panel-body text-center text-muted py-5">暂无收到的交易方案</div></div></div>
         {% endfor %}
     </div>
 </section>
@@ -102,23 +102,23 @@
     <div class="row g-3">
         {% for proposal in sent_proposals %}
         <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="panel">
+                <div class="panel-head bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <div>
                         <span class="fw-semibold">发送给 {{ proposal.receiver_city }} {{ proposal.receiver_name }}</span>
-                        <span class="text-secondary small ms-2">{{ proposal.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                        <span class="u-caps ms-2">{{ proposal.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                     </div>
                     {{ status_badge(proposal.status) }}
                 </div>
-                <div class="card-body">
+                <div class="panel-body">
                     <div class="row g-3 align-items-center">
                         <div class="col-md-5">
-                            <div class="text-secondary small mb-2">我方送出</div>
+                            <div class="u-caps mb-2">我方送出</div>
                             {{ player_badges(proposal.proposer_players, 'danger') }}
                         </div>
                         <div class="col-md-2 text-center text-secondary"><i class="bi bi-arrow-left-right fs-4"></i></div>
                         <div class="col-md-5">
-                            <div class="text-secondary small mb-2">希望得到</div>
+                            <div class="u-caps mb-2">希望得到</div>
                             {{ player_badges(proposal.receiver_players, 'success') }}
                         </div>
                     </div>
@@ -134,9 +134,9 @@
                             <button type="submit" class="btn btn-success btn-sm mt-2">复核并确认签约</button>
                         </form>
                         {% elif proposal.status == 'pending' %}
-                        <div class="text-secondary small">等待对方接受交易后开放签约确认。</div>
+                        <div class="u-caps">等待对方接受交易后开放签约确认。</div>
                         {% else %}
-                        <div class="text-secondary small">交易未成交，组合签约已取消。</div>
+                        <div class="u-caps">交易未成交，组合签约已取消。</div>
                         {% endif %}
                     </div>
                     {% endif %}
@@ -153,7 +153,7 @@
             </div>
         </div>
         {% else %}
-        <div class="col-12"><div class="card"><div class="card-body text-center text-muted py-5">暂无发出的交易方案</div></div></div>
+        <div class="col-12"><div class="panel"><div class="panel-body text-center text-muted py-5">暂无发出的交易方案</div></div></div>
         {% endfor %}
     </div>
 </section>

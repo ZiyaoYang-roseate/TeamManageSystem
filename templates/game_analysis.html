@@ -6,7 +6,7 @@
 {% set chart_rows = snapshot.get('timeline' if kind == 'review' else 'samples', []) %}
 <header class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
     <div>
-        <h1 class="h3 mb-1">{{ title }}</h1>
+        <h1 class="page-title mb-1">{{ title }}</h1>
         <div class="text-secondary">{{ game.home_team_name }} vs {{ game.away_team_name }} · {{ game.game_date }}</div>
     </div>
     <a href="{{ url_for('league_game',game_id=game.id) if current_user.role == ROLE_LEAGUE_ADMIN else url_for('game_detail', game_id=game.id) }}" class="btn btn-outline-secondary">{{ "返回比赛处理" if current_user.role == ROLE_LEAGUE_ADMIN else "比赛详情" }}</a>
@@ -41,10 +41,10 @@
 
 {% if kind == 'scout' %}
 {% if chosen_lineup %}
-<section class="card card-body mb-4" aria-labelledby="recommended-starters">
+<section class="panel panel-body mb-4" aria-labelledby="recommended-starters">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
         <h2 class="h5 mb-0" id="recommended-starters">推荐本队首发五人</h2>
-        <span class="small text-secondary">{{ "AI 推荐" if report.source == "model" else "规则推荐" }}</span>
+        <span class="u-caps">{{ "AI 推荐" if report.source == "model" else "规则推荐" }}</span>
     </div>
     <p class="small">{{ chosen_lineup.reason }}</p>
     <div class="table-responsive">
@@ -62,17 +62,17 @@
     {% if availability_players %}
     <div>
         <button class="btn btn-outline-primary btn-sm" type="button" data-use-lineup="{{ chosen_lineup.players | map(attribute='id') | list | tojson | forceescape }}">填入首发勾选</button>
-        <span class="small text-secondary ms-2" data-lineup-feedback aria-live="polite">核对后点击「提交本队首发五人」。</span>
+        <span class="u-caps ms-2" data-lineup-feedback aria-live="polite">核对后点击「提交本队首发五人」。</span>
     </div>
     {% endif %}
 </section>
 {% elif snapshot.get("starting_lineups") and not report %}
-<p class="small text-secondary">点击「生成赛前分析」获取本队首发五人建议。</p>
+<p class="u-caps">点击「生成赛前分析」获取本队首发五人建议。</p>
 {% endif %}
 {% if snapshot.history_before %}
-<p class="text-secondary small">统计范围为 {{ snapshot.history_before }} 之前对手的全部完赛记录，共 {{ chart_rows | length }} 场。</p>
+<p class="u-caps">统计范围为 {{ snapshot.history_before }} 之前对手的全部完赛记录，共 {{ chart_rows | length }} 场。</p>
 {% endif %}
-<section class="card card-body mb-4" id="starting-lineups">
+<section class="panel panel-body mb-4" id="starting-lineups">
     <h2 class="h5">首发五人</h2>
     <div class="row g-3">
         {% for id, name in teams.items() %}
@@ -92,7 +92,7 @@
 </section>
 {% if availability_players %}
     {% for id, players in availability_players | groupby('team_id') %}
-    <section class="card card-body mb-4">
+    <section class="panel panel-body mb-4">
         <h3 class="h6 mb-0">{{ teams[id] }}首发五人设置</h3>
         <form class="mt-3" method="post" data-starters action="{{ url_for('analysis_reports.publish_starters', game_id=game.id, team=team_id) }}">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -112,14 +112,14 @@
             </fieldset>
             <div class="d-flex flex-wrap align-items-center gap-3">
                 <button class="btn btn-primary">提交本队首发五人</button>
-                <span class="text-secondary small" data-selected-count aria-live="polite"></span>
+                <span class="u-caps" data-selected-count aria-live="polite"></span>
             </div>
         </form>
     </section>
     {% endfor %}
 {% endif %}
-<section class="card mb-4" id="opponent-availability">
-    <div class="card-body">
+<section class="panel mb-4" id="opponent-availability">
+    <div class="panel-body">
         <h2 class="h5">对手伤病与轮休 · {{ snapshot.subject }}</h2>
         {% if snapshot.availability %}
         <div class="table-responsive">
@@ -138,7 +138,7 @@
     </div>
 </section>
 {% if availability_players and can_publish_availability %}
-<details class="card card-body mb-4">
+<details class="panel panel-body mb-4">
     <summary class="fw-semibold">发布本场出勤公告</summary>
     <form class="row g-3 align-items-end mt-1" method="post" action="{{ url_for('analysis_reports.publish_availability', game_id=game.id, team=team_id) }}">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -175,12 +175,12 @@
 
 {% set chosen = report.content if report and report.content else preview if not report else None %}
 {% if chosen and chosen["items"] %}
-<section class="card mb-4" aria-labelledby="summary-title">
-    <div class="card-body">
+<section class="panel mb-4" aria-labelledby="summary-title">
+    <div class="panel-body">
         <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
             <h2 id="summary-title" class="h5 mb-0">教练组建议</h2>
             <span class="badge text-bg-secondary">{{ 'AI 整理' if report and report.source == 'model' else '数据建议' }}</span>
-            {% if report and report.source == 'model' %}<span class="text-secondary small">{{ report.generator }}</span>{% endif %}
+            {% if report and report.source == 'model' %}<span class="u-caps">{{ report.generator }}</span>{% endif %}
         </div>
         <ol class="mb-0 ps-4">
             {% for item in chosen["items"] %}
@@ -188,12 +188,12 @@
             <li class="mb-3">
                 <a class="fw-semibold" href="#evidence-{{ detail.id }}">{{ detail.title }}</a>
                 <div>{{ detail.fact }}</div>
-                <div class="text-secondary small mt-1">{{ detail.recommendation or actions[item.action_id] }}</div>
+                <div class="u-caps mt-1">{{ detail.recommendation or actions[item.action_id] }}</div>
             </li>
             {% endfor %}
         </ol>
         {% if report and report.source == 'rules' and report.generator != 'rules' %}
-        <div class="text-secondary small">模型暂不可用，已使用公开数据生成基础报告。</div>
+        <div class="u-caps">模型暂不可用，已使用公开数据生成基础报告。</div>
         {% endif %}
     </div>
 </section>
@@ -203,23 +203,23 @@
     {% else %}报告正在生成。<a class="alert-link" href="{{ request.path }}">刷新查看</a>。{% endif %}
 </div>
 {% elif not preview["items"] %}
-<p class="text-secondary small">现有比赛记录还不足以提出具体战术调整。可查看下面的比赛证据，再结合录像判断。</p>
+<p class="u-caps">现有比赛记录还不足以提出具体战术调整。可查看下面的比赛证据，再结合录像判断。</p>
 {% elif snapshot.evidence and not model_configured %}
-<p class="text-secondary small">当前使用比赛数据和规则生成报告。</p>
+<p class="u-caps">当前使用比赛数据和规则生成报告。</p>
 {% endif %}
 
 {% if snapshot.score %}
 <section class="row g-3 mb-4" aria-label="比赛概况">
     <div class="col-sm-6">
-        <div class="card card-body h-100">
-            <div class="text-secondary small">终场比分 · 本队比对手</div>
+        <div class="panel panel-body h-100">
+            <div class="u-caps">终场比分 · 本队比对手</div>
             <div class="h3 mb-0">{{ snapshot.score[0] }} : {{ snapshot.score[1] }}</div>
         </div>
     </div>
     {% if snapshot.timeline %}
     <div class="col-sm-6">
-        <div class="card card-body h-100">
-            <div class="text-secondary small">领先方变化</div>
+        <div class="panel panel-body h-100">
+            <div class="u-caps">领先方变化</div>
             <div class="h3 mb-0">{{ snapshot.lead_changes }} 次</div>
         </div>
     </div>
@@ -228,8 +228,8 @@
 {% endif %}
 
 {% if chart_rows %}
-<section class="card mb-4" aria-labelledby="chart-title">
-    <div class="card-body">
+<section class="panel mb-4" aria-labelledby="chart-title">
+    <div class="panel-body">
         <h2 id="chart-title" class="h5">{{ '累计比分走势' if kind == 'review' else snapshot.subject + '赛前战绩' }}</h2>
         <div style="height: 240px"><canvas id="analysisTrend" role="img" aria-labelledby="chart-title"></canvas></div>
         <div class="table-responsive mt-3">
@@ -301,7 +301,7 @@
         <li class="list-group-item d-flex justify-content-between gap-2">
             <a href="{{ url_for('analysis_reports.report_detail', game_id=game.id, report_id=saved.id) }}"
                {% if report and report.id == saved.id %}aria-current="page"{% endif %}>{{ saved.created_at }}</a>
-            <span class="text-secondary small">{{ 'AI 整理' if saved.source == 'model' else '规则生成' if saved.source == 'rules' else '待完成' }}</span>
+            <span class="u-caps">{{ 'AI 整理' if saved.source == 'model' else '规则生成' if saved.source == 'rules' else '待完成' }}</span>
         </li>
         {% endfor %}
     </ul>

@@ -4,8 +4,8 @@
 
 {% block content %}
 <div class="page-heading mb-4">
-    <h1 class="h3 mb-1">自由市场目标池与报价沙盘</h1>
-    <div class="text-secondary small">管理自由球员优先级，并实时模拟合同对薪资帽和奢侈税的影响</div>
+    <h1 class="page-title mb-1">自由市场目标池与报价沙盘</h1>
+    <div class="u-caps">管理自由球员优先级，并实时模拟合同对薪资帽和奢侈税的影响</div>
 </div>
 
 {% with assistant_description="自动从自由市场查找最多三名候选，给出轮换适配理由和可提交的合同报价。", assistant_button="生成签约方案" %}
@@ -42,46 +42,46 @@
     <div class="col-xl-8">
         <div class="row g-3">
             <div class="col-md-4">
-                <div class="card shadow-sm kanban-column" data-tier="Tier 1">
-                    <div class="card-header text-bg-danger d-flex justify-content-between align-items-center">
+                <div class="panel kanban-column" data-tier="Tier 1">
+                    <div class="panel-head text-bg-danger d-flex justify-content-between align-items-center">
                         <span class="fw-semibold">Tier 1 必争目标</span>
                         <span class="badge text-bg-light" data-count="Tier 1">0</span>
                     </div>
-                    <div class="card-body kanban-list" data-tier="Tier 1"></div>
+                    <div class="panel-body kanban-list" data-tier="Tier 1"></div>
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card shadow-sm kanban-column" data-tier="MLE Target">
-                    <div class="card-header text-bg-warning d-flex justify-content-between align-items-center">
+                <div class="panel kanban-column" data-tier="MLE Target">
+                    <div class="panel-head text-bg-warning d-flex justify-content-between align-items-center">
                         <span class="fw-semibold">MLE 中产特例目标</span>
                         <span class="badge text-bg-light" data-count="MLE Target">0</span>
                     </div>
-                    <div class="card-body kanban-list" data-tier="MLE Target"></div>
+                    <div class="panel-body kanban-list" data-tier="MLE Target"></div>
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card shadow-sm kanban-column" data-tier="Vet Min">
-                    <div class="card-header text-bg-info d-flex justify-content-between align-items-center">
+                <div class="panel kanban-column" data-tier="Vet Min">
+                    <div class="panel-head text-bg-info d-flex justify-content-between align-items-center">
                         <span class="fw-semibold">底薪 / 边缘补充</span>
                         <span class="badge text-bg-light" data-count="Vet Min">0</span>
                     </div>
-                    <div class="card-body kanban-list" data-tier="Vet Min"></div>
+                    <div class="panel-body kanban-list" data-tier="Vet Min"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="col-xl-4">
-        <div class="card shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="panel">
+            <div class="panel-head d-flex justify-content-between align-items-center">
                 <span class="fw-semibold">合同报价沙盘</span>
-                <span class="small text-secondary">实时演算</span>
+                <span class="u-caps">实时演算</span>
             </div>
-            <div class="card-body p-4">
+            <div class="panel-body p-4">
                 <div id="selectedTarget" class="mb-3">
-                    <div class="text-secondary small">当前目标</div>
+                    <div class="u-caps">当前目标</div>
                     <div class="h6 mb-0" id="sandboxPlayerName">请选择左侧球员</div>
-                    <div class="text-secondary small" id="sandboxPlayerMeta"></div>
+                    <div class="u-caps" id="sandboxPlayerMeta"></div>
                 </div>
 
                 <div class="mb-3">
@@ -130,18 +130,18 @@
                     <label class="form-check-label" for="playerOption">球员选项</label>
                 </div>
 
-                <div class="card bg-transparent border mb-3">
-                    <div class="card-body py-3">
+                <div class="panel bg-transparent border mb-3">
+                    <div class="panel-body py-3">
                         <div class="d-flex justify-content-between">
-                            <span class="text-secondary small">合同总额</span>
+                            <span class="u-caps">合同总额</span>
                             <strong id="totalValue">$0</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span class="text-secondary small">全期均薪 AAV</span>
+                            <span class="u-caps">全期均薪 AAV</span>
                             <strong id="aavValue">$0</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span class="text-secondary small">预计薪资帽空间</span>
+                            <span class="u-caps">预计薪资帽空间</span>
                             <strong id="capSpace">$0</strong>
                         </div>
                         <div class="progress mt-3" style="height: 8px;">
@@ -164,7 +164,7 @@
                 <button class="btn btn-success w-100 mt-2" id="signPlayerButton" disabled>
                     <i class="bi bi-person-check me-1"></i>按已保存报价签约
                 </button>
-                <p id="offerStatus" class="small text-secondary mt-2 mb-0" aria-live="polite">请先保存报价，再确认签约。</p>
+                <p id="offerStatus" class="u-caps mt-2 mb-0" aria-live="polite">请先保存报价，再确认签约。</p>
             </div>
         </div>
     </div>
@@ -256,7 +256,7 @@
                 <div class="d-flex justify-content-between align-items-start gap-2">
                     <div>
                         <div class="fw-semibold target-name"></div>
-                        <div class="small text-secondary target-position"></div>
+                        <div class="u-caps target-position"></div>
                         ${target.offer_id ? '<div class="small text-primary target-offer"></div>' : ""}
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-danger target-delete" data-target-id="${target.id}" aria-label="移除目标">
@@ -534,27 +534,33 @@
 
 <style>
     .kanban-column {
-        min-height: 520px;
+        min-height: 340px;
     }
     .kanban-list {
-        min-height: 420px;
+        min-height: 250px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
     }
     .target-card {
         width: 100%;
-        border: 1px solid var(--card-border);
-        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid var(--line);
+        background: var(--surface-2);
         color: inherit;
-        border-radius: 8px;
+        border-radius: var(--r-md);
         padding: 10px 12px;
-        margin-bottom: 8px;
+        margin-bottom: 0;
         cursor: grab;
+        transition: border-color 200ms var(--ease), background 200ms var(--ease), transform 200ms var(--ease);
     }
     .target-card:active {
         cursor: grabbing;
     }
     .target-card:hover {
-        border-color: var(--accent);
-        background: var(--accent-soft);
+        border-color: rgba(232, 134, 58, 0.45);
+        background: var(--surface-3);
+        transform: translateY(-1px);
     }
 </style>
 {% endblock %}

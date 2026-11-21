@@ -1,295 +1,36 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-bs-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script>
-        (function () {
-            var savedTheme = localStorage.getItem("theme");
-            if (savedTheme === "light" || savedTheme === "dark") {
-                document.documentElement.setAttribute("data-bs-theme", savedTheme);
-            }
-        })();
+        // Apply the stored theme before first paint so the shell never flashes.
+        try {
+            document.documentElement.setAttribute("data-bs-theme", localStorage.getItem("theme") || "dark");
+        } catch (error) {
+            /* private mode — fall back to the dark default */
+        }
     </script>
-    <title>{% block title %}NBA 球队管理系统{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <style>
-        tr:target > td {
-            background-color: var(--bs-primary-bg-subtle) !important;
-        }
-        :root {
-            --sidebar-bg: #0f1419;
-            --topbar-bg: #151b22;
-            --body-bg: #0b0f14;
-            --card-bg: #151b22;
-            --card-border: #26313c;
-            --muted: #9aa7b4;
-            --accent: #0d6efd;
-            --accent-soft: rgba(13, 110, 253, 0.16);
-            --danger: #dc3545;
-            --success: #20c997;
-        }
+    <title>{% block title %}Courtside · NBA 球队管理{% endblock %}</title>
 
-        [data-bs-theme="light"] {
-            --sidebar-bg: #101820;
-            --topbar-bg: #ffffff;
-            --body-bg: #f3f5f8;
-            --card-bg: #ffffff;
-            --card-border: #d9e0e8;
-            --muted: #64748b;
-            --accent: #0d6efd;
-            --accent-soft: rgba(13, 110, 253, 0.08);
-        }
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/motion.css') }}">
 
-        body {
-            background: var(--body-bg);
-            color: #dfe6ee;
-            min-height: 100vh;
-        }
-
-        [data-bs-theme="light"] body {
-            color: #1f2937;
-        }
-
-        .sidebar {
-            position: fixed;
-            inset: 0 auto 0 0;
-            width: 250px;
-            background: var(--sidebar-bg);
-            border-right: 1px solid var(--card-border);
-            overflow-y: auto;
-            z-index: 1040;
-        }
-
-        .sidebar-brand {
-            height: 64px;
-            display: flex;
-            align-items: center;
-            padding: 0 20px;
-            border-bottom: 1px solid var(--card-border);
-            color: #fff;
-            text-decoration: none;
-            font-weight: 700;
-            letter-spacing: 0;
-        }
-
-        .sidebar-group {
-            padding: 20px 18px 8px;
-            font-size: 11px;
-            text-transform: uppercase;
-            color: var(--muted);
-            letter-spacing: 0.04em;
-        }
-
-        .sidebar-dropdown {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            background: transparent;
-            border: 0;
-            text-align: left;
-            color: #c7d0da;
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: 0;
-            text-transform: none;
-        }
-
-        .sidebar-dropdown:hover {
-            color: #fff;
-        }
-
-        .sidebar-dropdown i {
-            font-size: 12px;
-            transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
-            will-change: transform;
-        }
-
-        .sidebar-dropdown:not(.collapsed) i {
-            transform: rotate(180deg);
-        }
-
-        .sidebar-accordion {
-            height: 0;
-            padding: 0 12px 0;
-            overflow: hidden;
-        }
-
-        .sidebar-accordion.show {
-            height: auto;
-        }
-
-        .sidebar-accordion .nav {
-            margin: 0;
-            padding: 0 0 10px;
-        }
-
-        .sidebar-accordion .nav-link {
-            padding-left: 24px;
-        }
-
-        .sidebar .nav {
-            padding: 0 12px 10px;
-        }
-
-        .sidebar .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 9px 12px;
-            margin: 2px 0;
-            border-radius: 7px;
-            color: #c7d0da;
-            font-size: 14px;
-        }
-
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
-            color: #fff;
-            background: var(--accent-soft);
-        }
-
-        .sidebar .nav-link i {
-            width: 18px;
-            text-align: center;
-        }
-
-        .topbar {
-            position: fixed;
-            top: 0;
-            right: 0;
-            left: 250px;
-            height: 64px;
-            background: var(--topbar-bg);
-            border-bottom: 1px solid var(--card-border);
-            display: flex;
-            align-items: center;
-            padding: 0 24px;
-            gap: 14px;
-            z-index: 1030;
-        }
-
-        .dashboard-main {
-            margin-left: 250px;
-            padding: 88px 28px 40px;
-            min-height: 100vh;
-            animation: page-fade-in 0.22s ease;
-        }
-
-        @keyframes page-fade-in {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 10px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
-        }
-
-        [data-bs-theme="light"] .card {
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
-        }
-
-        .table {
-            --bs-table-bg: transparent;
-            --bs-table-color: inherit;
-        }
-
-        .table thead th {
-            background: rgba(255, 255, 255, 0.04);
-            border-bottom: 1px solid var(--card-border);
-            color: var(--muted);
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            white-space: nowrap;
-        }
-
-        .table tbody tr:last-child td {
-            border-bottom: 0;
-        }
-
-        .metric-card {
-            border-left: 3px solid var(--accent);
-        }
-
-        .search-wrap {
-            min-width: 220px;
-        }
-
-        .theme-toggle {
-            border: 1px solid var(--card-border);
-            background: transparent;
-            color: var(--muted);
-        }
-
-        .tooltip-inner {
-            max-width: 260px;
-        }
-
-        .skeleton {
-            position: fixed;
-            inset: 64px 0 0 250px;
-            z-index: 1080;
-            background: var(--body-bg);
-            opacity: 1;
-            transition: opacity 0.25s ease;
-        }
-
-        .skeleton.is-hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .skeleton-block {
-            height: 18px;
-            margin: 16px 28px;
-            border-radius: 6px;
-            background: linear-gradient(90deg, #1b2530 25%, #25313d 50%, #1b2530 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.3s infinite;
-        }
-
-        [data-bs-theme="light"] .skeleton-block {
-            background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
-            background-size: 200% 100%;
-        }
-
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        @media (max-width: 991.98px) {
-            .sidebar {
-                transform: translateX(-100%);
-                transition: transform 0.2s ease;
-            }
-
-            .sidebar.show {
-                transform: translateX(0);
-            }
-
-            .topbar {
-                left: 0;
-            }
-
-            .dashboard-main {
-                margin-left: 0;
-            }
-
-            .skeleton {
-                left: 0;
-            }
-        }
-    </style>
+    <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts-init.js') }}"></script>
+    {% block head_extra %}{% endblock %}
 </head>
 <body>
+    <div class="app-bg" aria-hidden="true">
+        <span class="court-ring r1"></span>
+        <span class="court-ring r2"></span>
+        <span class="court-ring r3"></span>
+        <span class="court-arc"></span>
+    </div>
+
     <div class="skeleton" id="pageSkeleton">
         <div class="skeleton-block" style="width: 38%; height: 28px;"></div>
         <div class="skeleton-block"></div>
@@ -300,147 +41,184 @@
 
     <aside class="sidebar" id="sidebar">
         <a class="sidebar-brand" href="{{ url_for('league_dashboard' if current_user and current_user.role == ROLE_LEAGUE_ADMIN else 'index') }}">
-            <i class="bi bi-dribbble me-2"></i>
-            <span>NBA Data Hub</span>
+            <span class="brand-mark"><i class="bi bi-dribbble"></i></span>
+            <span class="brand-text">
+                <span class="brand-name">Courtside</span>
+                <span class="brand-sub">NBA 球队管理</span>
+            </span>
         </a>
 
-        <ul class="nav flex-column">
-            {% if current_user and current_user.role == ROLE_LEAGUE_ADMIN %}
-            <li>
-                <a class="nav-link {% if request.endpoint == 'league_dashboard' %}active{% endif %}" href="{{ url_for('league_dashboard') }}">
-                    <i class="bi bi-clipboard-data"></i>联赛比赛管理
-                </a>
-            </li>
+        <div class="sidebar-scroll">
+            <ul class="nav flex-column">
+                {% if current_user and current_user.role == ROLE_LEAGUE_ADMIN %}
+                <li>
+                    <a class="nav-link {% if request.endpoint == 'league_dashboard' %}active{% endif %}" href="{{ url_for('league_dashboard') }}">
+                        <i class="bi bi-clipboard-data"></i>联赛运营台
+                    </a>
+                </li>
+                {% endif %}
+                <li>
+                    <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+                        <i class="bi bi-speedometer2"></i>数据总览
+                    </a>
+                </li>
+            </ul>
+
+            <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#analyticsNav">
+                <span>分析</span><i class="bi bi-chevron-down"></i>
+            </button>
+            <div id="analyticsNav" class="sidebar-accordion show">
+                <ul class="nav flex-column">
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'analytics' %}active{% endif %}" href="{{ url_for('analytics') }}">
+                            <i class="bi bi-graph-up"></i>球员数据
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'shot_chart' %}active{% endif %}" href="{{ url_for('shot_chart') }}">
+                            <i class="bi bi-bullseye"></i>投篮热区
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'compare_players' %}active{% endif %}" href="{{ url_for('compare_players') }}">
+                            <i class="bi bi-arrow-left-right"></i>球员对比
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'lineups' %}active{% endif %}" href="{{ url_for('lineups') }}">
+                            <i class="bi bi-diagram-3"></i>阵容组合
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+            <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#rosterNav">
+                <span>管理层</span><i class="bi bi-chevron-down"></i>
+            </button>
+            <div id="rosterNav" class="sidebar-accordion show">
+                <ul class="nav flex-column">
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'players' %}active{% endif %}" href="{{ url_for('players') }}">
+                            <i class="bi bi-person-badge"></i>球员档案
+                        </a>
+                    </li>
+                    <li>
+                        {% set team_destination = 'my_team' if current_user.role == ROLE_MANAGEMENT else 'teams' %}
+                        <a class="nav-link {% if request.endpoint == team_destination %}active{% endif %}" href="{{ url_for(team_destination) }}">
+                            <i class="bi bi-shield"></i>球队
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'salary' %}active{% endif %}" href="{{ url_for('salary') }}">
+                            <i class="bi bi-cash-coin"></i>薪资合同
+                        </a>
+                    </li>
+                    {% if current_user.role == ROLE_MANAGEMENT %}
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'free_agency' %}active{% endif %}" href="{{ url_for('free_agency') }}">
+                            <i class="bi bi-bag-plus"></i>自由市场
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'trade_machine' %}active{% endif %}" href="{{ url_for('trade_machine') }}">
+                            <i class="bi bi-send"></i>发起交易
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'trade_proposals_page' %}active{% endif %}" href="{{ url_for('trade_proposals_page') }}">
+                            <i class="bi bi-inbox"></i>交易收发记录
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'scouting' %}active{% endif %}" href="{{ url_for('scouting') }}">
+                            <i class="bi bi-search"></i>球探选秀
+                        </a>
+                    </li>
+                </ul>
+            </div>
             {% endif %}
-            <li>
-                <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
-                    <i class="bi bi-speedometer2"></i>数据总览
-                </a>
-            </li>
-        </ul>
 
-        <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#analyticsNav">
-            <span>分析</span><i class="bi bi-chevron-down"></i>
-        </button>
-        <div id="analyticsNav" class="sidebar-accordion show">
-            <ul class="nav flex-column">
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'analytics' %}active{% endif %}" href="{{ url_for('analytics') }}">
-                        <i class="bi bi-graph-up"></i>球员数据
-                    </a>
-                </li>
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'shot_chart' %}active{% endif %}" href="{{ url_for('shot_chart') }}">
-                        <i class="bi bi-bullseye"></i>投篮热区
-                    </a>
-                </li>
-                {% if current_user.role != ROLE_SCOREKEEPER %}
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'compare_players' %}active{% endif %}" href="{{ url_for('compare_players') }}">
-                        <i class="bi bi-arrow-left-right"></i>球员对比
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
+            <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#competitionNav">
+                <span>比赛</span><i class="bi bi-chevron-down"></i>
+            </button>
+            <div id="competitionNav" class="sidebar-accordion show">
+                <ul class="nav flex-column">
+                    {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'games' %}active{% endif %}" href="{{ url_for('games') }}">
+                            <i class="bi bi-calendar3"></i>赛事中心
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user and current_user.role == ROLE_SCOREKEEPER %}
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'scorekeeper_calendar' or request.endpoint == 'scorekeeper_game' %}active{% endif %}" href="{{ url_for('scorekeeper_calendar') }}">
+                            <i class="bi bi-stopwatch"></i>计分员面板
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
         </div>
 
-        {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
-        <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#rosterNav">
-            <span>{{ "球队管理" if current_user.role == ROLE_MANAGEMENT else "基础档案" }}</span><i class="bi bi-chevron-down"></i>
-        </button>
-        <div id="rosterNav" class="sidebar-accordion show">
-            <ul class="nav flex-column">
-
-                <li>
-                    {% set team_destination = 'my_team' if current_user.role == ROLE_MANAGEMENT else 'teams' %}
-                    <a class="nav-link {% if request.endpoint == team_destination %}active{% endif %}" href="{{ url_for(team_destination) }}">
-                        <i class="bi bi-shield"></i>球队
-                    </a>
-                </li>
-                {% if current_user.role == ROLE_MANAGEMENT %}
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'salary' %}active{% endif %}" href="{{ url_for('salary') }}">
-                        <i class="bi bi-cash-coin"></i>薪资与阵容规划
-                    </a>
-                </li>
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'free_agency' %}active{% endif %}" href="{{ url_for('free_agency') }}">
-                        <i class="bi bi-bag-plus"></i>自由市场
-                    </a>
-                </li>
-                {% endif %}
-                {% if current_user.role == ROLE_MANAGEMENT %}
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'trade_machine' %}active{% endif %}" href="{{ url_for('trade_machine') }}">
-                        <i class="bi bi-send"></i>发起交易
-                    </a>
-                </li>
-                {% endif %}
-                {% if current_user.role == ROLE_MANAGEMENT %}
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'trade_proposals_page' %}active{% endif %}" href="{{ url_for('trade_proposals_page') }}">
-                        <i class="bi bi-inbox"></i>交易收发记录
-                    </a>
-                </li>
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'scouting' %}active{% endif %}" href="{{ url_for('scouting') }}">
-                        <i class="bi bi-search"></i>选秀准备
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-        </div>
-        {% endif %}
-
-        <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#competitionNav">
-            <span>比赛</span><i class="bi bi-chevron-down"></i>
-        </button>
-        <div id="competitionNav" class="sidebar-accordion show">
-            <ul class="nav flex-column">
-                {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'games' %}active{% endif %}" href="{{ url_for('games') }}">
-                        <i class="bi bi-calendar3"></i>赛事中心
-                    </a>
-                </li>
-                {% endif %}
-                {% if current_user and current_user.role == ROLE_SCOREKEEPER %}
-                <li>
-                    <a class="nav-link {% if request.endpoint == 'scorekeeper_calendar' or request.endpoint == 'scorekeeper_game' %}active{% endif %}" href="{{ url_for('scorekeeper_calendar') }}">
-                        <i class="bi bi-stopwatch"></i>计分员面板
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
+        <div class="sidebar-foot">
+            <div class="sidebar-card">
+                <div class="kicker">当前赛季</div>
+                <div class="value" id="sidebarSeason">2025-26</div>
+            </div>
         </div>
     </aside>
 
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <header class="topbar">
-        <button class="btn btn-sm theme-toggle d-lg-none" id="mobileMenuToggle" type="button" aria-controls="sidebar">
+        <button class="icon-btn d-lg-none" id="mobileMenuToggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="打开导航">
             <i class="bi bi-list"></i>
         </button>
+
         <div class="search-wrap flex-grow-1">
-            <div class="input-group input-group-sm">
-                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search"></i></span>
-                <input id="globalSearch" type="search" class="form-control bg-transparent border-start-0" placeholder="搜索当前数据">
-            </div>
+            <label class="search-box" for="globalSearch">
+                <i class="bi bi-search"></i>
+                <input id="globalSearch" type="search" class="form-control" placeholder="搜索当前数据" autocomplete="off">
+                <kbd>/</kbd>
+            </label>
         </div>
-        <select class="form-select form-select-sm" id="seasonSelect" style="max-width: 150px;" aria-label="赛季" onchange="changeSeason(this.value)">
-            <option value="2023-24">2023-24 赛季</option>
-            <option value="2024-25">2024-25 赛季</option>
-            <option value="2025-26">2025-26 赛季</option>
+
+        <nav class="topbar-links d-none d-xl-flex" aria-label="快捷导航">
+            <a href="{{ url_for('games', season=season) }}"><i class="bi bi-calendar3"></i>比分</a>
+            <a href="{{ url_for('teams', season=season) }}"><i class="bi bi-shield"></i>球队</a>
+            <a href="{{ url_for('analytics', season=season) }}"><i class="bi bi-graph-up"></i>球员</a>
+            <a href="{{ url_for('league_dashboard', season=season) }}"><i class="bi bi-broadcast"></i>运营台</a>
+        </nav>
+
+        <select class="form-select form-select-sm d-none d-md-block" id="seasonSelect" style="width: 132px;" aria-label="赛季" onchange="changeSeason(this.value)">
+            <option value="2023-24">2023-24</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
         </select>
-        <button class="btn btn-sm theme-toggle" id="themeToggle" type="button" aria-label="切换主题">
+
+        <span class="topbar-divider d-none d-sm-block"></span>
+
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题">
             <i class="bi bi-moon-stars"></i>
         </button>
+
         {% if current_user %}
         <div class="dropdown">
-            <button class="btn btn-sm theme-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-person-circle me-1"></i>
-                <span class="d-none d-sm-inline">{{ current_user.display_name }}</span>
-                <span class="badge text-bg-primary ms-1">{{ ROLE_LABELS[current_user.role] }}</span>
+            <button class="user-chip dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <span class="avatar">{{ (current_user.display_name or "U")[:1] }}</span>
+                <span class="d-none d-sm-block text-start">
+                    <span class="name">{{ current_user.display_name }}</span>
+                    <span class="role">{{ ROLE_LABELS[current_user.role] }}</span>
+                </span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <h6 class="dropdown-header">{{ current_user.display_name }}</h6>
+                </li>
+                <li><hr class="dropdown-divider"></li>
                 <li>
                     <form action="{{ url_for('logout') }}" method="post">
                         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -455,168 +233,25 @@
     </header>
 
     <main class="dashboard-main">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+        <div class="main-inner">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
 
-        {% block content %}{% endblock %}
+            {% block content %}{% endblock %}
+        </div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const html = document.documentElement;
-        const themeToggle = document.getElementById("themeToggle");
-        const themeIcon = themeToggle.querySelector("i");
-        const sidebar = document.getElementById("sidebar");
-        const mobileMenuToggle = document.getElementById("mobileMenuToggle");
-
-        function syncThemeIcon() {
-            themeIcon.className = html.getAttribute("data-bs-theme") === "dark"
-                ? "bi bi-sun"
-                : "bi bi-moon-stars";
-        }
-
-        themeToggle.addEventListener("click", () => {
-            const nextTheme = html.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
-            html.setAttribute("data-bs-theme", nextTheme);
-            localStorage.setItem("theme", nextTheme);
-            syncThemeIcon();
-        });
-
-        mobileMenuToggle.addEventListener("click", () => {
-            sidebar.classList.toggle("show");
-        });
-
-        function syncSidebarAccordions() {
-            document.querySelectorAll(".sidebar-dropdown").forEach((button) => {
-                const targetId = button.getAttribute("data-sidebar-target");
-                const target = document.getElementById(targetId.slice(1));
-                if (!target) return;
-                const expanded = target.classList.contains("show");
-                button.classList.toggle("collapsed", !expanded);
-                button.setAttribute("aria-expanded", expanded ? "true" : "false");
-            });
-        }
-
-        function toggleSidebarAccordion(target, willShow) {
-            const contentHeight = target.scrollHeight;
-            const startHeight = target.getBoundingClientRect().height;
-            target.classList.toggle("show", willShow);
-
-            const animation = target.animate(
-                [
-                    { height: startHeight + "px" },
-                    { height: (willShow ? contentHeight : 0) + "px" }
-                ],
-                {
-                    duration: 360,
-                    easing: "cubic-bezier(0.22, 1, 0.36, 1)"
-                }
-            );
-
-            animation.onfinish = () => {
-                target.style.height = willShow ? "auto" : "0px";
-            };
-        }
-
-        document.addEventListener("click", (event) => {
-            const button = event.target.closest(".sidebar-dropdown");
-            if (!button) return;
-            const targetId = button.getAttribute("data-sidebar-target");
-            const target = document.getElementById(targetId.slice(1));
-            if (!target) return;
-
-            const willShow = !target.classList.contains("show");
-            toggleSidebarAccordion(target, willShow);
-            syncSidebarAccordions();
-        });
-
-        syncSidebarAccordions();
-
-        const searchInput = document.getElementById("globalSearch");
-        searchInput.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            const keyword = searchInput.value.trim();
-            const url = new URL(window.location.href);
-            if (keyword) {
-                url.searchParams.set("q", keyword);
-            } else {
-                url.searchParams.delete("q");
-            }
-            url.searchParams.set("page", "1");
-            window.location.href = url.toString();
-        });
-
-        function changeSeason(season) {
-            localStorage.setItem("season", season);
-            const url = new URL(window.location.href);
-            url.searchParams.set("season", season);
-            window.location.href = url.toString();
-        }
-
-        const selectedSeason = new URLSearchParams(window.location.search).get("season")
-            || localStorage.getItem("season")
-            || "2025-26";
-        const seasonSelect = document.getElementById("seasonSelect");
-        if (seasonSelect) {
-            seasonSelect.value = selectedSeason;
-        }
-
-        const currentSearch = new URLSearchParams(window.location.search).get("q") || "";
-        if (currentSearch) {
-            searchInput.value = currentSearch;
-        }
-
-        function applyLocalSearchFilter() {
-            if (document.getElementById("serverSearchScope")) return;
-            const keyword = new URLSearchParams(window.location.search).get("q") || "";
-            if (!keyword) return;
-            document.querySelectorAll("table tbody tr").forEach((row) => {
-                row.style.display = row.textContent.toLowerCase().includes(keyword.toLowerCase()) ? "" : "none";
-            });
-        }
-
-        applyLocalSearchFilter();
-
-        function applySeasonToLinks() {
-            const currentSeason = new URLSearchParams(window.location.search).get("season")
-                || localStorage.getItem("season")
-                || "2025-26";
-            document.querySelectorAll("a[href]").forEach((link) => {
-                const rawHref = link.getAttribute("href");
-                if (!rawHref || rawHref.startsWith("http") || rawHref.startsWith("#")) {
-                    return;
-                }
-                const url = new URL(rawHref, window.location.href);
-                if (url.origin !== window.location.origin) {
-                    return;
-                }
-                url.searchParams.set("season", currentSeason);
-                link.setAttribute("href", url.pathname + url.search + url.hash);
-            });
-        }
-
-        applySeasonToLinks();
-
-        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
-            new bootstrap.Tooltip(element);
-        });
-
-        window.addEventListener("load", () => {
-            const skeleton = document.getElementById("pageSkeleton");
-            skeleton.classList.add("is-hidden");
-            setTimeout(() => skeleton.remove(), 320);
-        });
-
-        syncThemeIcon();
-    </script>
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/motion.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

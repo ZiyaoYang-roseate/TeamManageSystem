@@ -7,7 +7,7 @@
     <p class="text-secondary mb-0">{{ game.game_date }} · {{ game.season }} · {{ {'scheduled':'待开赛','live':'进行中','finished':'已完赛','cancelled':'已取消'}.get(game.status,game.status) }}</p>
 </header>
 {% if game.status == "live" %}
-<section class="card card-body mb-4">
+<section class="panel panel-body mb-4">
     <h2 class="h5">确认完赛</h2>
     <p class="small">当前记录到第 {{ game.period }} 节，剩余 {{ "%d:%02d"|format(game.seconds_remaining // 60,game.seconds_remaining % 60) }}。后续没有新增统计时，可按当前领先比分结束。</p>
     {% if game.home_score != game.away_score and game.starters_initialized %}
@@ -31,7 +31,7 @@
     <div class="row g-3">
         {% for team_id,name in [(game.home_team_id,game.home_team_name),(game.away_team_id,game.away_team_name)] %}
         {% set lineup = starters|selectattr('team_id','equalto',team_id)|list %}
-        <div class="col-md-6"><div class="card card-body">
+        <div class="col-md-6"><div class="panel panel-body">
             <h3 class="h6">{{ name }} · {{ lineup|length }}/5</h3>
             <ul class="mb-0">
                 {% for player in lineup %}<li>{{ player.name }} · {{ player.position }}</li>
@@ -55,13 +55,13 @@
 {% if game.status == "finished" %}
 <section class="border-top pt-3">
     <h2 class="h5">完赛记录与核查</h2>
-    <p class="small text-secondary">实际记录截止于第 {{ game.period }} 节 · 剩余 {{ "%d:%02d"|format(game.seconds_remaining // 60,game.seconds_remaining % 60) }}。</p>
+    <p class="u-caps">实际记录截止于第 {{ game.period }} 节 · 剩余 {{ "%d:%02d"|format(game.seconds_remaining // 60,game.seconds_remaining % 60) }}。</p>
     {% if review %}
     <div class="mb-3">
         <strong>{{ "已记录处理结果" if review.status == "resolved" else "待处理" }}</strong>
         <p class="mb-1">{{ review.finding }}</p>
         {% if review.resolution %}<p class="small mb-1">{{ review.resolution }}</p>{% endif %}
-        <span class="small text-secondary">{{ review.resolved_at or review.opened_at }}</span>
+        <span class="u-caps">{{ review.resolved_at or review.opened_at }}</span>
     </div>
     {% endif %}
     {% if not review or review.status == "open" %}

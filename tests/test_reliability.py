@@ -29,15 +29,44 @@ class ReliabilityTests(unittest.TestCase):
             self.assertEqual(response.status_code, 403)
             overview.assert_not_called()
 
-    def test_private_workspaces_reject_non_managers_before_querying(self):
-        for role in ("league_admin", "scorekeeper"):
-            self.manager.update(role=role, team_id=None)
-            with self.subTest(role=role), patch("team_planning.transaction") as tx:
-                self.assertEqual(self.client.get("/salary").status_code, 403)
-                self.assertEqual(self.client.get("/scouting").status_code, 403)
-                self.assertEqual(self.client.post("/scouting", headers=self.headers).status_code, 403)
-                self.assertEqual(self.client.post("/api/salary/preview/trade", json={}, headers=self.headers).status_code, 403)
-                tx.assert_not_called()
+    def test_private_workspaces_reject_outsiders_and_open_readonly_for_league_admin(self):
+        # 记分员等无球队角色：直接 403，且不会触达数据层
+        self.manager.update(role="scorekeeper", team_id=None)
+        with patch("team_planning.transaction") as tx:
+            self.assertEqual(self.client.get("/salary").status_code, 403)
+            self.assertEqual(self.client.get("/scouting").status_code, 403)
+            self.assertEqual(self.client.post("/scouting", headers=self.headers).status_code, 403)
+            self.assertEqual(self.client.post("/api/salary/preview/trade", json={}, headers=self.headers).status_code, 403)
+            tx.assert_not_called()
+
+        # 联赛管理员：只读查看任意球队，写入一律 303 回原页且不落库
+        self.manager.update(role="league_admin", team_id=None)
+        team = {"id": 1, "city": "Boston", "name": "Celtics"}
+        years = [{
+            "season": "2025-26",
+            "current": {"payroll": 120, "without_options": 110, "depth": {"PG": 2}},
+            "cap": {"cap_amount": 140, "luxury_tax_line": 170},
+        }]
+        contracts = [{
+            "name": "A", "position": "PG", "start_year": 2025, "end_year": 2027,
+            "annual_salary": 30, "annual_increase_pct": 0.05,
+            "team_option": False, "player_option": True,
+        }]
+        workspace = {
+            "year": 2026, "years": [2026], "prospects": [], "picks": [], "games": 0,
+            "next_rank": 1, "draft_order": None, "priorities": [], "needs": [], "expiring": [],
+        }
+        with patch("team_planning.transaction") as tx, \
+                patch.object(app, "planning_teams", return_value=[]), \
+                patch("team_planning.salary_plan", return_value=(team, years, contracts)), \
+                patch("team_planning.draft_workspace", return_value=workspace):
+            response = self.client.get("/salary")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("只读查看", response.get_data(as_text=True))
+            self.assertEqual(self.client.get("/scouting").status_code, 200)
+            self.assertEqual(self.client.post("/scouting", headers=self.headers).status_code, 303)
+            self.assertEqual(self.client.post("/salary", headers=self.headers).status_code, 303)
+            tx.assert_not_called()
 
     def test_both_business_date_urls_require_league_admin(self):
         for role in ("management", "scorekeeper"):

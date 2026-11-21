@@ -1,88 +1,137 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
 
-{% block title %}比赛记录 - NBA 球队管理系统{% endblock %}
+{% block title %}比赛记录 - Courtside{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-    <div>
-        <h1 class="h3 mb-1">{{ filtered_team.name + '比赛记录' if filtered_team else '比赛记录' }}</h1>
-        <div class="text-secondary small">当前比赛日 {{ business_date or '未设置' }} · 本日比赛优先，其次待开始，最后已完赛。</div>
-    </div>
-    {% if filtered_team %}
-    <a class="btn btn-outline-secondary" href="{{ url_for('games', season=season, q=search or None) }}">查看全联盟赛程</a>
-    {% endif %}
+{% call ui.page_head('Schedule · ' ~ season,
+    (filtered_team.name ~ '比赛记录') if filtered_team else '比赛记录',
+    '当前比赛日 ' ~ (business_date or '未设置') ~ ' · 本日比赛优先，其次待开始，最后已完赛。') %}
+  {% if filtered_team %}
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('games', season=season, q=search or None) }}">
+    <i class="bi bi-grid-3x3-gap me-1"></i>全联盟赛程
+  </a>
+  {% endif %}
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('league_dashboard', season=season) }}">
+    <i class="bi bi-sliders me-1"></i>运营台
+  </a>
+{% endcall %}
+
+<div class="kpi-grid">
+  {{ ui.kpi('已结束', status_counts['finished'], '含复盘数据', '赛季累计') }}
+  {{ ui.kpi('进行中', status_counts['live'], '实时比分', '正在计分') }}
+  {{ ui.kpi('待开始', status_counts['scheduled'], '尚未开赛', '后续赛程') }}
+  {{ ui.kpi('已取消', status_counts['cancelled'], '不计入战绩', '特殊情况') }}
 </div>
 
-<div class="card shadow-sm">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th scope="col">日期</th>
-                    <th scope="col">主队</th>
-                    <th scope="col">客队</th>
-                    <th scope="col">比分</th>
-                    <th scope="col">状态</th>
-                    <th scope="col">胜者</th>
-                    <th scope="col" class="text-end">详情</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for game in games %}
-                <tr>
-                    <td class="text-nowrap">{{ game.game_date }}{% if game.game_date == business_date %}<span class="badge text-bg-primary ms-1">本日</span>{% endif %}</td>
-                    <td class="text-nowrap">{{ game.home_team_name }} ({{ game.home_team_abbr }})</td>
-                    <td class="text-nowrap">{{ game.away_team_name }} ({{ game.away_team_abbr }})</td>
-                    <td class="fw-semibold">{{ game.home_score }} : {{ game.away_score }}</td>
-                    <td>
-                        {% if game.status == 'live' %}
-                        <span class="badge text-bg-success">进行中</span>
-                        {% elif game.status == 'scheduled' %}
-                        <span class="badge text-bg-warning">待开始</span>
-                        {% elif game.status == 'cancelled' %}
-                        <span class="badge text-bg-secondary">已取消</span>
-                        {% else %}
-                        <span class="badge text-bg-secondary">已结束</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if game.status != 'finished' %}
-                        -
-                        {% elif game.home_score > game.away_score %}
-                        {{ game.home_team_name }}
-                        {% else %}
-                        {{ game.away_team_name }}
-                        {% endif %}
-                    </td>
-                    <td class="text-end">
-                        <a href="{{ url_for('game_detail', game_id=game.id) }}" class="btn btn-sm btn-outline-primary">
-                            查看技术统计
-                        </a>
-                        {% if current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
-                        {% if current_user.role == ROLE_MANAGEMENT and game.status != 'cancelled' and (can_edit_team(game.home_team_id) or can_edit_team(game.away_team_id)) %}
-                        <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='scout') }}" class="btn btn-sm btn-outline-primary">赛前分析</a>
-                        {% endif %}
-                        {% if game.status == 'finished' %}
-                        <a href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='review') }}" class="btn btn-sm btn-outline-primary">赛后复盘</a>
-                        {% endif %}
-                        {% endif %}
-                        {% if current_user and current_user.role == ROLE_SCOREKEEPER and game.status != 'cancelled' %}
-                        <a href="{{ url_for('scorekeeper_game', game_id=game.id) }}" class="btn btn-sm btn-outline-success ms-1">
-                            {% if game.status == 'live' %}继续计分{% elif game.status == 'scheduled' %}进入{% else %}计分面板{% endif %}
-                        </a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="7" class="text-center text-muted py-5">
-                        <i class="bi bi-calendar3 me-1"></i>暂无比赛记录
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="panel mt-3">
+  <div class="panel-head">
+    <div class="panel-head-main">
+      <h2 class="panel-title">赛程列表</h2>
+      <div class="panel-sub">按比赛日排序，点击比分进入比赛详情。</div>
     </div>
+    <form class="d-flex gap-2" method="get" action="{{ url_for('games') }}">
+      <input type="hidden" name="season" value="{{ season }}">
+      {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+      {% if filtered_team %}<input type="hidden" name="team" value="{{ filtered_team.id }}">{% endif %}
+      <input class="form-control form-control-sm table-search" type="search" name="q" value="{{ search or '' }}"
+             placeholder="搜索球队 / 缩写" aria-label="搜索赛程">
+      <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="搜索"><i class="bi bi-search"></i></button>
+    </form>
+  </div>
+
+  <div class="chip-row px-3 pt-3">
+    <a class="chip {{ 'is-active' if not status_filter }}" href="{{ url_for('games', season=season, q=search or None, team=filtered_team.id if filtered_team else None) }}">全部</a>
+    <a class="chip {{ 'is-active' if status_filter == 'finished' }}" href="{{ url_for('games', season=season, status='finished', q=search or None, team=filtered_team.id if filtered_team else None) }}">已结束</a>
+    <a class="chip {{ 'is-active' if status_filter == 'live' }}" href="{{ url_for('games', season=season, status='live', q=search or None, team=filtered_team.id if filtered_team else None) }}">进行中</a>
+    <a class="chip {{ 'is-active' if status_filter == 'scheduled' }}" href="{{ url_for('games', season=season, status='scheduled', q=search or None, team=filtered_team.id if filtered_team else None) }}">待开始</a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th scope="col">日期</th>
+          <th scope="col">客队</th>
+          <th scope="col">主队</th>
+          <th scope="col" class="num text-end">比分</th>
+          <th scope="col" class="text-center">分差</th>
+          <th scope="col">状态</th>
+          <th scope="col" class="text-end">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for game in games %}
+        {% set finished = game.status == 'finished' %}
+        {% set diff = (game.home_score - game.away_score) | abs %}
+        {% set payload = {
+          'kicker': 'Game ' ~ game.id,
+          'status': game.status,
+          'date': (game.game_date | ymd),
+          'season': season,
+          'home_score': game.home_score,
+          'away_score': game.away_score,
+          'margin': diff,
+          'home': {'name': game.home_team_name, 'abbr': game.home_team_abbr},
+          'away': {'name': game.away_team_name, 'abbr': game.away_team_abbr},
+          'href': url_for('game_detail', game_id=game.id),
+          'play_by_play': url_for('play_by_play', game_id=game.id)
+        } %}
+        <tr>
+          <td class="text-nowrap mono-num">
+            {{ game.game_date }}
+            {% if game.game_date == business_date %}<span class="badge text-bg-primary ms-1">本日</span>{% endif %}
+          </td>
+          <td class="text-nowrap">{{ ui.team_cell(game.away_team_abbr, game.away_team_name) }}</td>
+          <td class="text-nowrap">{{ ui.team_cell(game.home_team_abbr, game.home_team_name) }}</td>
+          <td class="num text-end">
+            <a class="mono-num is-strong" href="{{ url_for('game_detail', game_id=game.id) }}"
+               data-game="{{ payload | tojson | forceescape }}" title="快速查看赛程">
+              {{ game.away_score }} : {{ game.home_score }}
+            </a>
+          </td>
+          <td class="text-center {{ 'u-muted' if not finished else ('pos' if diff >= 10 else '') }}">
+            {{ diff if finished else '—' }}
+          </td>
+          <td>
+            {% if game.status == 'live' %}<span class="badge badge-live">进行中</span>
+            {% elif game.status == 'scheduled' %}<span class="badge text-bg-warning">待开始</span>
+            {% elif game.status == 'cancelled' %}<span class="badge text-bg-secondary">已取消</span>
+            {% else %}<span class="badge text-bg-secondary">已结束</span>{% endif %}
+          </td>
+          <td class="text-end text-nowrap">
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('game_detail', game_id=game.id) }}" title="技术统计">
+              <i class="bi bi-bar-chart-line"></i>
+            </a>
+            {% if current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+              {% if current_user.role == ROLE_MANAGEMENT and game.status != 'cancelled' and (can_edit_team(game.home_team_id) or can_edit_team(game.away_team_id)) %}
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='scout') }}" title="赛前分析">
+                <i class="bi bi-clipboard2-pulse"></i>
+              </a>
+              {% endif %}
+              {% if game.status == 'finished' %}
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analysis_reports.overview', game_id=game.id, kind='review') }}" title="赛后复盘">
+                <i class="bi bi-journal-check"></i>
+              </a>
+              {% endif %}
+            {% endif %}
+            {% if current_user and current_user.role == ROLE_SCOREKEEPER and game.status != 'cancelled' %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('scorekeeper_game', game_id=game.id) }}" title="计分面板">
+              <i class="bi bi-controller"></i>
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7">
+            {{ ui.empty('bi-calendar3', '暂无比赛记录', '调整赛季或筛选条件后再试。') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% include "_pagination.html" %}
 {% endblock %}

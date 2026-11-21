@@ -47,20 +47,20 @@
         </div>
     </header>
 
-    <section class="card card-body mb-4" aria-labelledby="career-teams-title">
+    <section class="panel panel-body mb-4" aria-labelledby="career-teams-title">
         <h2 class="h5" id="career-teams-title">生涯效力球队</h2>
-        <p class="small text-secondary">根据本系统的比赛、合同和当前归属记录整理。日期为实际出场记录范围。</p>
+        <p class="u-caps">根据本系统的比赛、合同和当前归属记录整理。日期为实际出场记录范围。</p>
         <div class="row g-3">{% for team in career_teams %}<div class="col-md-6"><div class="border rounded p-3 h-100">
             <div class="d-flex justify-content-between gap-2"><strong>{{ team.name }}</strong>{% if team.is_current %}<span class="badge text-bg-primary">当前所属</span>{% endif %}</div>
-            {% if team.games %}<div class="small mt-2">{{ team.seasons }} · {{ team.games }} 场完赛出场</div><div class="small text-secondary">{{ team.first_game }} 至 {{ team.last_game }}</div>
-            {% else %}<div class="small text-secondary mt-2">{{ '尚无完赛出场记录' if team.is_current else '有合同记录，暂无完赛出场记录' }}</div>{% endif %}
-        </div></div>{% else %}<p class="small text-secondary mb-0">暂无本联赛球队效力记录。</p>{% endfor %}</div>
+            {% if team.games %}<div class="small mt-2">{{ team.seasons }} · {{ team.games }} 场完赛出场</div><div class="u-caps">{{ team.first_game }} 至 {{ team.last_game }}</div>
+            {% else %}<div class="u-caps mt-2">{{ '尚无完赛出场记录' if team.is_current else '有合同记录，暂无完赛出场记录' }}</div>{% endif %}
+        </div></div>{% else %}<p class="u-caps mb-0">暂无本联赛球队效力记录。</p>{% endfor %}</div>
     </section>
 
     <section class="mb-4" aria-labelledby="season-performance">
         <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-2">
             <h2 class="h5 mb-0" id="season-performance">{{ season }} 赛季表现</h2>
-            <span class="text-secondary small">{% if summary %}{{ summary.games }} 场已完赛出场记录{% else %}暂无出场记录{% endif %}</span>
+            <span class="u-caps">{% if summary %}{{ summary.games }} 场已完赛出场记录{% else %}暂无出场记录{% endif %}</span>
         </div>
         {% set metrics = [('points', '场均得分'), ('rebounds', '场均篮板'), ('assists', '场均助攻'), ('minutes', '场均分钟'), ('fg_pct', '投篮命中率'), ('ts_pct', '真实命中率')] %}
         <dl class="profile-stats">
@@ -73,7 +73,7 @@
             {% endfor %}
         </dl>
         {% if summary %}
-        <div class="profile-secondary small text-secondary">
+        <div class="u-caps profile-secondary">
             <span>场均抢断 {{ stat(summary.steals) }}</span>
             <span>场均盖帽 {{ stat(summary.blocks) }}</span>
             <span>场均失误 {{ stat(summary.turnovers) }}</span>
@@ -81,7 +81,7 @@
             <span>场均正负值 {{ "%+.1f"|format(summary.plus_minus) }}</span>
         </div>
         {% else %}
-        <p class="small text-secondary mt-2 mb-0">可在顶部切换赛季，查看已录入的历史表现。</p>
+        <p class="u-caps mt-2 mb-0">可在顶部切换赛季，查看已录入的历史表现。</p>
         {% endif %}
     </section>
 
@@ -89,7 +89,7 @@
         <section class="profile-panel" aria-labelledby="recent-title">
             <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
                 <h2 class="h5 mb-0" id="recent-title">最近比赛</h2>
-                {% if recent_average %}<span class="small text-secondary">最近 {{ recent_average.games }} 场</span>{% endif %}
+                {% if recent_average %}<span class="u-caps">最近 {{ recent_average.games }} 场</span>{% endif %}
             </div>
             {% if performance.recent %}
             <div class="profile-recent-summary small mb-3">
@@ -101,7 +101,7 @@
             {% if performance.recent|length > 1 %}
             <div id="profileTrend" hidden>
                 <div class="d-flex align-items-center gap-2 mb-2">
-                    <label for="profileTrendMetric" class="small text-secondary">走势</label>
+                    <label for="profileTrendMetric" class="u-caps">走势</label>
                     <select id="profileTrendMetric" class="form-select form-select-sm w-auto">
                         <option value="points">得分</option>
                         <option value="rebounds">篮板</option>
@@ -118,7 +118,7 @@
                     {% for game in performance.recent %}
                         <tr>
                             <th scope="row"><a href="{{ url_for('scorekeeper_game' if current_user.role == ROLE_SCOREKEEPER else 'game_detail', game_id=game.game_id, season=season) }}" class="text-nowrap">对 {{ game.opponent }}</a>
-                                <div class="small text-secondary fw-normal">{{ game.game_date }} · {{ game.played_for }}</div>
+                                <div class="u-caps fw-normal">{{ game.game_date }} · {{ game.played_for }}</div>
                             </th>
                             <td class="text-nowrap small">{{ "胜" if game.team_score > game.opponent_score else "负" if game.team_score < game.opponent_score else "平" }} {{ game.team_score }}:{{ game.opponent_score }}</td>
                             <td class="text-nowrap">{{ game.played_seconds // 60 }}:{{ "%02d"|format(game.played_seconds % 60) }}</td>
@@ -135,7 +135,7 @@
         <section class="profile-panel" aria-labelledby="shot-profile-title">
             <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
                 <h2 class="h5 mb-0" id="shot-profile-title">出手偏好</h2>
-                {% if shot_total %}<span class="small text-secondary">{{ shot_total }} 次有位置的投篮记录</span>{% endif %}
+                {% if shot_total %}<span class="u-caps">{{ shot_total }} 次有位置的投篮记录</span>{% endif %}
             </div>
             {% if favorite %}
             <p class="small mb-3">最多出手来自 <strong>{{ favorite.label }}</strong>，占已记录出手的 {{ (favorite.attempts * 100 / shot_total)|round(1) }}%。</p>
@@ -151,7 +151,7 @@
                 </li>
                 {% endfor %}
             </ul>
-            <p class="small text-secondary mb-0">条形长度表示出手占比。出手记录少于 10 次的区域标为小样本。</p>
+            <p class="u-caps mb-0">条形长度表示出手占比。出手记录少于 10 次的区域标为小样本。</p>
             {% else %}<p class="text-secondary mb-0">本赛季暂无带落点的投篮记录。</p>{% endif %}
         </section>
     </div>

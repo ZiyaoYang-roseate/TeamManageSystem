@@ -68,3 +68,38 @@
 .shot-analysis #shot-details:target { border-color: var(--bs-primary); }
 @media (max-width: 1050px) { .shot-analysis .shot-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 575px) { .shot-analysis .shot-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ------------------------------------------------------------
+   Courtside tint: retune the heat scale to the amber design system
+   ------------------------------------------------------------ */
+.shot-analysis {
+    --court-bg: #0f0f12;
+    --court-line: rgba(236, 234, 228, 0.28);
+}
+.shot-analysis .shot-panel {
+    border-color: var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface-2);
+}
+.shot-analysis .shot-summary { border-color: var(--line); }
+.shot-analysis .shot-summary strong {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-1);
+}
+.shot-analysis .shot-court { border-radius: var(--r-md); }
+.shot-analysis .shot-court-labels {
+    fill: var(--text-1);
+    stroke: rgba(8, 8, 10, 0.9);
+}
+.shot-analysis .tone-empty { --zone-tone: rgba(255, 255, 255, 0.05); }
+.shot-analysis .tone-low { --zone-tone: rgba(236, 234, 228, 0.12); }
+.shot-analysis .tone-medium { --zone-tone: rgba(232, 134, 58, 0.3); }
+.shot-analysis .tone-high { --zone-tone: rgba(232, 134, 58, 0.48); }
+.shot-analysis .tone-higher { --zone-tone: rgba(232, 134, 58, 0.66); }
+.shot-analysis .tone-near { --zone-tone: rgba(236, 234, 228, 0.2); }
+.shot-analysis .tone-lower { --zone-tone: rgba(74, 158, 255, 0.24); }
+.shot-analysis .tone-unavailable { --zone-tone: transparent; }
+.shot-analysis .shot-legend { color: var(--text-3); font-size: 10.5px; }
+.shot-analysis #shot-details:target { border-color: var(--accent); }
