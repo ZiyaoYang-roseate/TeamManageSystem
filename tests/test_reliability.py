@@ -57,6 +57,7 @@ class ReliabilityTests(unittest.TestCase):
             "next_rank": 1, "draft_order": None, "priorities": [], "needs": [], "expiring": [],
         }
         with patch("team_planning.transaction") as tx, \
+                patch("db.fetch_all", return_value=[{"id": 1}]), \
                 patch.object(app, "planning_teams", return_value=[]), \
                 patch("team_planning.salary_plan", return_value=(team, years, contracts)), \
                 patch("team_planning.draft_workspace", return_value=workspace):
