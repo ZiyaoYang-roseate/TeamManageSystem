@@ -79,11 +79,13 @@
                             <i class="bi bi-bullseye"></i>投篮热区
                         </a>
                     </li>
+                    {% if current_user and current_user.role != ROLE_SCOREKEEPER %}
                     <li>
                         <a class="nav-link {% if request.endpoint == 'compare_players' %}active{% endif %}" href="{{ url_for('compare_players') }}">
                             <i class="bi bi-arrow-left-right"></i>球员对比
                         </a>
                     </li>
+                    {% endif %}
                     <li>
                         <a class="nav-link {% if request.endpoint == 'lineups' %}active{% endif %}" href="{{ url_for('lineups') }}">
                             <i class="bi bi-diagram-3"></i>阵容组合
