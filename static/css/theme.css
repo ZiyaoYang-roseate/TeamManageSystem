@@ -81,10 +81,10 @@ html[data-bs-theme="dark"] {
   /* motion + type */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --dur: 250ms;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-chinese: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, var(--font-chinese);
   --font-display: "Space Grotesk", var(--font-sans);
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, var(--font-chinese);
 
   /* layout */
   --sidebar-w: 264px;
@@ -2423,13 +2423,17 @@ html[data-bs-theme="light"] .btn-close {
 }
 
 .u-caps {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.75;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
 }
+
+/* Full explanatory sentences need more room than compact metadata. */
+p.u-caps { font-size: 14px; line-height: 1.8; }
 
 /* hero compact ------------------------------------------------------------ */
 .hero.is-compact {
@@ -4314,11 +4318,18 @@ body { font-size: 15px; line-height: 1.65; letter-spacing: 0; }
 .panel h3.h5, .panel h3.h6, .panel h4.h6 { font-size: 15px; line-height: 1.5; }
 .page-heading .text-secondary, .page-head .page-sub,
 .hero-sub, .evidence-item p { font-size: 14px; line-height: 1.75; }
-.section-sub, .pc-team, .row-meta { font-family: var(--font-sans); font-size: 12px; letter-spacing: 0; }
+.section-sub, .pc-team, .row-meta, .record-note, .fm-sub {
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.7; letter-spacing: 0;
+}
+.kpi-label, .metric-label, .stat-label {
+  font-family: var(--font-sans); font-size: 12px; line-height: 1.6; letter-spacing: 0;
+}
 .table { font-size: 14px; font-variant-numeric: tabular-nums; }
 .table thead th { font-family: var(--font-sans); font-size: 12px; letter-spacing: .02em; }
 .form-control, .form-select, .btn { font-size: 14px; }
-.form-label, .form-text { font-size: 13px; }
+.form-label, label.form-label, .form-text {
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.7; letter-spacing: 0;
+}
 .search-box .form-control { font-size: 14px; min-width: 0; }
 .user-chip .name { display: block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.35; }
 .user-chip .role { font-family: var(--font-sans); font-size: 11px; letter-spacing: .02em; line-height: 1.35; }
