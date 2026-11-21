@@ -40,7 +40,7 @@
     </div>
 
     <aside class="sidebar" id="sidebar">
-        <a class="sidebar-brand" href="{{ url_for('league_dashboard' if current_user and current_user.role == ROLE_LEAGUE_ADMIN else 'index') }}">
+        <a class="sidebar-brand" href="{{ url_for('league_dashboard' if current_user and current_user.role == ROLE_LEAGUE_ADMIN else 'scorekeeper_calendar' if current_user and current_user.role == ROLE_SCOREKEEPER else 'index') }}">
             <span class="brand-mark"><i class="bi bi-dribbble"></i></span>
             <span class="brand-text">
                 <span class="brand-name">Courtside</span>
@@ -86,37 +86,27 @@
                         </a>
                     </li>
                     {% endif %}
-                    <li>
-                        <a class="nav-link {% if request.endpoint == 'lineups' %}active{% endif %}" href="{{ url_for('lineups') }}">
-                            <i class="bi bi-diagram-3"></i>阵容组合
-                        </a>
-                    </li>
                 </ul>
             </div>
 
             {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
             <button class="sidebar-group sidebar-dropdown" type="button" data-sidebar-target="#rosterNav">
-                <span>管理层</span><i class="bi bi-chevron-down"></i>
+                <span>{{ '球队管理' if current_user.role == ROLE_MANAGEMENT else '联赛资料' }}</span><i class="bi bi-chevron-down"></i>
             </button>
             <div id="rosterNav" class="sidebar-accordion show">
                 <ul class="nav flex-column">
-                    <li>
-                        <a class="nav-link {% if request.endpoint == 'players' %}active{% endif %}" href="{{ url_for('players') }}">
-                            <i class="bi bi-person-badge"></i>球员档案
-                        </a>
-                    </li>
                     <li>
                         {% set team_destination = 'my_team' if current_user.role == ROLE_MANAGEMENT else 'teams' %}
                         <a class="nav-link {% if request.endpoint == team_destination %}active{% endif %}" href="{{ url_for(team_destination) }}">
                             <i class="bi bi-shield"></i>球队
                         </a>
                     </li>
+                    {% if current_user.role == ROLE_MANAGEMENT %}
                     <li>
                         <a class="nav-link {% if request.endpoint == 'salary' %}active{% endif %}" href="{{ url_for('salary') }}">
-                            <i class="bi bi-cash-coin"></i>薪资合同
+                            <i class="bi bi-cash-coin"></i>薪资与阵容规划
                         </a>
                     </li>
-                    {% if current_user.role == ROLE_MANAGEMENT %}
                     <li>
                         <a class="nav-link {% if request.endpoint == 'free_agency' %}active{% endif %}" href="{{ url_for('free_agency') }}">
                             <i class="bi bi-bag-plus"></i>自由市场
@@ -132,12 +122,18 @@
                             <i class="bi bi-inbox"></i>交易收发记录
                         </a>
                     </li>
-                    {% endif %}
                     <li>
                         <a class="nav-link {% if request.endpoint == 'scouting' %}active{% endif %}" href="{{ url_for('scouting') }}">
-                            <i class="bi bi-search"></i>球探选秀
+                            <i class="bi bi-search"></i>选秀准备
                         </a>
                     </li>
+                    {% else %}
+                    <li>
+                        <a class="nav-link {% if request.endpoint == 'league_draft_pool' %}active{% endif %}" href="{{ url_for('league_draft_pool') }}">
+                            <i class="bi bi-person-lines-fill"></i>选秀候选池
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
             {% endif %}
@@ -189,10 +185,14 @@
         </div>
 
         <nav class="topbar-links d-none d-xl-flex" aria-label="快捷导航">
-            <a href="{{ url_for('games', season=season) }}"><i class="bi bi-calendar3"></i>比分</a>
-            <a href="{{ url_for('teams', season=season) }}"><i class="bi bi-shield"></i>球队</a>
+            <a href="{{ url_for('scorekeeper_calendar' if current_user and current_user.role == ROLE_SCOREKEEPER else 'games', season=season) }}"><i class="bi bi-calendar3"></i>{{ '计分赛程' if current_user and current_user.role == ROLE_SCOREKEEPER else '比分' }}</a>
+            {% if current_user and current_user.role in (ROLE_MANAGEMENT, ROLE_LEAGUE_ADMIN) %}
+            <a href="{{ url_for('my_team' if current_user.role == ROLE_MANAGEMENT else 'teams', season=season) }}"><i class="bi bi-shield"></i>{{ '本队' if current_user.role == ROLE_MANAGEMENT else '球队' }}</a>
+            {% endif %}
             <a href="{{ url_for('analytics', season=season) }}"><i class="bi bi-graph-up"></i>球员</a>
+            {% if current_user and current_user.role == ROLE_LEAGUE_ADMIN %}
             <a href="{{ url_for('league_dashboard', season=season) }}"><i class="bi bi-broadcast"></i>运营台</a>
+            {% endif %}
         </nav>
 
         <select class="form-select form-select-sm d-none d-md-block" id="seasonSelect" style="width: 132px;" aria-label="赛季" onchange="changeSeason(this.value)">

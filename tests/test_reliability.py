@@ -29,18 +29,22 @@ class ReliabilityTests(unittest.TestCase):
             self.assertEqual(response.status_code, 403)
             overview.assert_not_called()
 
-    def test_private_workspaces_reject_outsiders_and_open_readonly_for_league_admin(self):
-        # 记分员等无球队角色：直接 403，且不会触达数据层
-        self.manager.update(role="scorekeeper", team_id=None)
-        with patch("team_planning.transaction") as tx:
-            self.assertEqual(self.client.get("/salary").status_code, 403)
-            self.assertEqual(self.client.get("/scouting").status_code, 403)
-            self.assertEqual(self.client.post("/scouting", headers=self.headers).status_code, 403)
-            self.assertEqual(self.client.post("/api/salary/preview/trade", json={}, headers=self.headers).status_code, 403)
-            tx.assert_not_called()
+    def test_private_workspaces_reject_admin_and_scorekeeper_before_data_access(self):
+        for role in ("scorekeeper", "league_admin"):
+            self.manager.update(role=role, team_id=None)
+            with self.subTest(role=role), patch("team_planning.transaction") as tx, \
+                    patch("team_planning.salary_plan") as salary, \
+                    patch("team_planning.draft_workspace") as draft:
+                for url in ("/salary?team_id=10", "/scouting?team_id=10"):
+                    self.assertEqual(self.client.get(url).status_code, 403)
+                    self.assertEqual(self.client.post(url, headers=self.headers).status_code, 403)
+                self.assertEqual(self.client.post("/api/salary/preview/trade", json={}, headers=self.headers).status_code, 403)
+                tx.assert_not_called()
+                salary.assert_not_called()
+                draft.assert_not_called()
 
-        # 联赛管理员：只读查看任意球队，写入一律 303 回原页且不落库
-        self.manager.update(role="league_admin", team_id=None)
+    def test_private_workspaces_always_use_logged_in_management_team(self):
+        self.manager.update(role="management", team_id=10)
         team = {"id": 1, "city": "Boston", "name": "Celtics"}
         years = [{
             "season": "2025-26",
@@ -56,18 +60,28 @@ class ReliabilityTests(unittest.TestCase):
             "year": 2026, "years": [2026], "prospects": [], "picks": [], "games": 0,
             "next_rank": 1, "draft_order": None, "priorities": [], "needs": [], "expiring": [],
         }
-        with patch("team_planning.transaction") as tx, \
-                patch("db.fetch_all", return_value=[{"id": 1}]), \
-                patch.object(app, "planning_teams", return_value=[]), \
-                patch("team_planning.salary_plan", return_value=(team, years, contracts)), \
-                patch("team_planning.draft_workspace", return_value=workspace):
-            response = self.client.get("/salary")
+        with patch("team_planning.salary_plan", return_value=(team, years, contracts)) as salary, \
+                patch("team_planning.draft_workspace", return_value=workspace) as draft:
+            response = self.client.get("/salary?team_id=99")
             self.assertEqual(response.status_code, 200)
-            self.assertIn("只读查看", response.get_data(as_text=True))
-            self.assertEqual(self.client.get("/scouting").status_code, 200)
-            self.assertEqual(self.client.post("/scouting", headers=self.headers).status_code, 303)
-            self.assertEqual(self.client.post("/salary", headers=self.headers).status_code, 303)
-            tx.assert_not_called()
+            self.assertNotIn("只读查看", response.get_data(as_text=True))
+            salary.assert_called_once_with(10, "2025-26")
+            self.assertEqual(self.client.get("/scouting?team_id=99").status_code, 200)
+            draft.assert_called_once_with(10, "2025-26", None)
+
+    def test_retired_lineups_page_cannot_be_opened_by_any_role(self):
+        for role in ("management", "league_admin", "scorekeeper"):
+            self.manager.update(role=role)
+            with self.subTest(role=role), patch.object(app, "lineup_page") as query:
+                self.assertEqual(self.client.get("/lineups").status_code, 404)
+                query.assert_not_called()
+
+    def test_scorekeeper_cannot_open_player_comparison(self):
+        self.manager.update(role="scorekeeper", team_id=None)
+        with patch.object(app, "fetch_all") as query:
+            response = self.client.get("/compare")
+            self.assertIn(response.status_code, (302, 403))
+            query.assert_not_called()
 
     def test_both_business_date_urls_require_league_admin(self):
         for role in ("management", "scorekeeper"):

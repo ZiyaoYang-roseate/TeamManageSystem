@@ -60,7 +60,6 @@ from security import (
     csrf_token,
     management_team_id,
     planning_team_id,
-    planning_teams,
     require_csrf,
     require_league_admin,
 )
@@ -188,7 +187,7 @@ MANAGEMENT_ENDPOINTS = {
     "edit_team",
     "delete_team",
     "health",
-    "lineups",
+    "compare_players",
     "free_agency",
     "trade_machine",
     "trade_proposals_page",
@@ -1152,27 +1151,6 @@ def shot_chart():
     )
 
 
-@app.route("/lineups")
-def lineups():
-    page, per_page = pagination_args(20)
-    rows, total = lineup_page(page, per_page, search_term())
-    highlights = lineup_highlights()
-    total_pages = (total + per_page - 1) // per_page
-    return render_template(
-        "lineups.html",
-        lineups=rows,
-        best_five=highlights["best_five"],
-        worst_five=highlights["worst_five"],
-        best_three=highlights["best_three"],
-        best_two=highlights["best_two"],
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=total_pages,
-        search=search_term(),
-    )
-
-
 def _package_serializer():
     return URLSafeTimedSerializer(app.secret_key, salt="team-roster-package")
 
@@ -1181,10 +1159,6 @@ def _package_serializer():
 def salary():
     team_id = planning_team_id()
     season = current_season()
-    readonly = bool(getattr(g, "planning_readonly", False))
-    if readonly and request.method == "POST":
-        flash("联赛管理员查看薪资为只读视图；如需调整合同，请切换到该球队的管理层账号。", "warning")
-        return redirect(url_for("salary", season=season, team_id=team_id), code=303)
     team, years, contracts = team_planning.salary_plan(team_id, season)
     recommendations = None
     if request.method == "POST":
@@ -1199,8 +1173,7 @@ def salary():
         years=years,
         contracts=contracts,
         recommendations=recommendations,
-        readonly=readonly,
-        teams=planning_teams() if readonly else [],
+        readonly=False,
     ), {"Cache-Control": "private, no-store"}
 
 
@@ -1245,13 +1218,9 @@ def health():
 def scouting():
     team_id = planning_team_id()
     season = current_season()
-    readonly = bool(getattr(g, "planning_readonly", False))
     values = request.form if request.method == "POST" else request.args
     raw_year = values.get("year")
     year = bounded_int(raw_year, "选秀年份", 2000, 2100) if raw_year else None
-    if readonly and request.method == "POST":
-        flash("联赛管理员查看选秀板为只读视图；如需调整优先顺序，请切换到该球队的管理层账号。", "warning")
-        return redirect(url_for("scouting", year=year, season=season, team_id=team_id), code=303)
     comparison = None
     recommendations = None
     if request.method == "POST":
@@ -1287,8 +1256,7 @@ def scouting():
         recommendations=recommendations,
         season=season,
         current_team_id=team_id,
-        readonly=readonly,
-        teams=planning_teams() if readonly else [],
+        readonly=False,
     ), {
         "Cache-Control": "private, no-store",
     }

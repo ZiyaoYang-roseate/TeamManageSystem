@@ -34,7 +34,7 @@ html[data-bs-theme="dark"] {
   /* text */
   --text-1: #f5f5f7;
   --text-2: #a5a5ad;
-  --text-3: #74747d;
+  --text-3: #a0a0ab;
 
   /* accents */
   --accent: #e8863a;
@@ -169,7 +169,7 @@ html[data-bs-theme="light"] {
 
   --text-1: #18181b;
   --text-2: #57575f;
-  --text-3: #8b8b93;
+  --text-3: #666670;
 
   --accent: #cd6a1f;
   --accent-2: #b95a12;
@@ -4249,6 +4249,13 @@ html[data-bs-theme="light"] .scoreboard {
 .badge.text-bg-info { background: rgba(74, 158, 255, 0.14) !important; color: #8fc1ff !important; }
 .badge.text-bg-success { background: rgba(52, 199, 89, 0.14) !important; color: #7fe0a0 !important; }
 .badge.text-bg-primary { background: rgba(232, 134, 58, 0.16) !important; color: var(--accent-2) !important; }
+
+/* Pale status colors designed for dark cards need darker ink on light cards. */
+html[data-bs-theme="light"] :is(.badge, .panel-head).text-bg-danger { color: #ae241c !important; }
+html[data-bs-theme="light"] :is(.badge, .panel-head).text-bg-warning { color: #805300 !important; }
+html[data-bs-theme="light"] :is(.badge, .panel-head).text-bg-info { color: #175fa9 !important; }
+html[data-bs-theme="light"] :is(.badge, .panel-head).text-bg-success { color: #126a31 !important; }
+html[data-bs-theme="light"] :is(.badge, .panel-head).text-bg-primary { color: #a34c0c !important; }
 /* v13 — panel head neutral, compact table search */
 .panel > .panel-head,
 .panel-head {
@@ -4297,6 +4304,39 @@ html[data-bs-theme="light"] .scoreboard {
 .error-body { min-width: 0; max-width: 620px; }
 .error-message { color: var(--text-2); font-size: 13.5px; line-height: 1.7; margin: 0 0 14px; }
 .error-identity { align-self: center; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; color: var(--text-3); margin-left: 4px; }
+
+/* Readable Chinese UI: keep numeric columns aligned, give prose room to breathe. */
+body { font-size: 15px; line-height: 1.65; letter-spacing: 0; }
+.sidebar .nav-link { font-size: 14px; }
+.sidebar-group { font-family: var(--font-sans); font-size: 12px; letter-spacing: .04em; }
+.panel-title,
+.panel h1.h4, .panel h2.h4, .panel h2.h5,
+.panel h3.h5, .panel h3.h6, .panel h4.h6 { font-size: 15px; line-height: 1.5; }
+.page-heading .text-secondary, .page-head .page-sub,
+.hero-sub, .evidence-item p { font-size: 14px; line-height: 1.75; }
+.section-sub, .pc-team, .row-meta { font-family: var(--font-sans); font-size: 12px; letter-spacing: 0; }
+.table { font-size: 14px; font-variant-numeric: tabular-nums; }
+.table thead th { font-family: var(--font-sans); font-size: 12px; letter-spacing: .02em; }
+.form-control, .form-select, .btn { font-size: 14px; }
+.form-label, .form-text { font-size: 13px; }
+.search-box .form-control { font-size: 14px; min-width: 0; }
+.user-chip .name { display: block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.35; }
+.user-chip .role { font-family: var(--font-sans); font-size: 11px; letter-spacing: .02em; line-height: 1.35; }
+.hero-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; max-width: 760px; }
+.hero-stat .label { font-family: var(--font-sans); font-size: 12px; letter-spacing: .04em; }
+.hero-stat .value { line-height: 1.5; }
+
+/* Search, navigation and account controls occupy distinct regions. */
+.topbar .search-wrap { flex: 1 1 auto; min-width: 0; max-width: none; }
+.topbar > :not(.search-wrap):not(.topbar-links) { flex-shrink: 0; }
+@media (min-width: 1200px) {
+  .topbar { gap: 16px; }
+  .topbar .search-wrap { flex: 0 1 280px !important; min-width: 160px; }
+}
+@media (max-width: 575.98px) {
+  body { font-size: 15px; }
+  .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
 
 @media (max-width: 767.98px) {
   .error-shell { flex-direction: column; align-items: flex-start; gap: 20px; padding: 28px 22px; }

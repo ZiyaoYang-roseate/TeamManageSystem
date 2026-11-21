@@ -44,7 +44,7 @@
 
   function applyDefaults(t) {
     Chart.defaults.font.family = t.font;
-    Chart.defaults.font.size = 11;
+    Chart.defaults.font.size = 12;
     Chart.defaults.color = t.text;
     Chart.defaults.borderColor = t.grid;
 
@@ -67,8 +67,8 @@
     tooltip.boxWidth = 7;
     tooltip.boxHeight = 7;
     tooltip.usePointStyle = true;
-    tooltip.titleFont = { size: 11, weight: "600" };
-    tooltip.bodyFont = { size: 11 };
+    tooltip.titleFont = { size: 13, weight: "600" };
+    tooltip.bodyFont = { size: 12 };
   }
 
   applyDefaults(cached);
@@ -92,7 +92,7 @@
       Object.values(config.options.scales).forEach((scale) => {
         scale = scale || {};
         scale.grid = Object.assign({ color: t.grid, drawBorder: false, borderColor: t.grid }, scale.grid);
-        scale.ticks = Object.assign({ color: t.muted, font: { size: 10 } }, scale.ticks);
+        scale.ticks = Object.assign({ color: t.muted, font: { size: 12 } }, scale.ticks);
         if (scale.border && scale.border.color === undefined) scale.border.color = t.grid;
       });
 

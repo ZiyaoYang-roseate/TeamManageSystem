@@ -345,7 +345,7 @@
         "</div>" +
         (rows ? '<div class="gd-rows">' + rows + "</div>" : "") +
         '<div class="gd-actions">' +
-          (data.href ? '<a class="btn btn-primary btn-sm" href="' + escapeHTML(data.href) + '"><i class="bi bi-bar-chart-line me-1"></i>技术统计</a>' : "") +
+          (data.href ? '<a class="btn btn-primary btn-sm" href="' + escapeHTML(data.href) + '"><i class="bi bi-bar-chart-line me-1"></i>' + escapeHTML(data.detail_label || '技术统计') + '</a>' : "") +
           (data.play_by_play ? '<a class="btn btn-secondary btn-sm" href="' + escapeHTML(data.play_by_play) + '"><i class="bi bi-list-ol me-1"></i>逐回合</a>' : "") +
           (data.analysis ? '<a class="btn btn-outline-secondary btn-sm" href="' + escapeHTML(data.analysis) + '"><i class="bi bi-stars me-1"></i>赛后复盘</a>' : "") +
         "</div>" +

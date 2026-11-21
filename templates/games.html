@@ -12,9 +12,11 @@
     <i class="bi bi-grid-3x3-gap me-1"></i>全联盟赛程
   </a>
   {% endif %}
+  {% if current_user.role == ROLE_LEAGUE_ADMIN %}
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('league_dashboard', season=season) }}">
     <i class="bi bi-sliders me-1"></i>运营台
   </a>
+  {% endif %}
 {% endcall %}
 
 <div class="kpi-grid">

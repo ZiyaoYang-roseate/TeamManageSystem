@@ -8,11 +8,13 @@
 {% set finished = snapshot.games_finished if snapshot and snapshot.games_finished else 0 %}
 
 {% call ui.page_head('League pulse · ' ~ season, '联盟脉搏', '球队战绩、当晚比分与个人表现，一屏掌握联盟格局。') %}
+  {% if current_user.role == ROLE_LEAGUE_ADMIN %}
   <a class="btn btn-outline-secondary btn-sm magnet" href="{{ url_for('league_dashboard', season=season) }}">
     <i class="bi bi-bar-chart-line me-1"></i>联赛运营台
   </a>
-  <a class="btn btn-primary btn-sm btn-sheen magnet" href="{{ url_for('games', season=season) }}">
-    <i class="bi bi-calendar3 me-1"></i>全部赛程
+  {% endif %}
+  <a class="btn btn-primary btn-sm btn-sheen magnet" href="{{ url_for('scorekeeper_calendar' if current_user.role == ROLE_SCOREKEEPER else 'games', season=season) }}">
+    <i class="bi bi-calendar3 me-1"></i>{{ '计分赛程' if current_user.role == ROLE_SCOREKEEPER else '全部赛程' }}
   </a>
 {% endcall %}
 
@@ -60,7 +62,7 @@
       <h2 class="section-title">最近比赛</h2>
       <div class="section-sub">按比赛日倒序 · 点按卡片弹出赛程详情，或进入完整技术统计</div>
     </div>
-    <a class="btn btn-link btn-sm text-decoration-none" href="{{ url_for('games', season=season) }}">
+    <a class="btn btn-link btn-sm text-decoration-none" href="{{ url_for('scorekeeper_calendar' if current_user.role == ROLE_SCOREKEEPER else 'games', season=season) }}">
       全部赛程 <i class="bi bi-arrow-right ms-1"></i>
     </a>
   </div>
@@ -77,10 +79,11 @@
       'margin': (game.home_score - game.away_score) | abs,
       'home': {'name': game.home_team_name, 'abbr': game.home_team_abbr},
       'away': {'name': game.away_team_name, 'abbr': game.away_team_abbr},
-      'href': url_for('game_detail', game_id=game.id),
-      'play_by_play': url_for('play_by_play', game_id=game.id)
+      'href': url_for('scorekeeper_game' if current_user.role == ROLE_SCOREKEEPER else 'game_detail', game_id=game.id),
+      'detail_label': '计分面板' if current_user.role == ROLE_SCOREKEEPER else '技术统计',
+      'play_by_play': url_for('play_by_play', game_id=game.id) if current_user.role != ROLE_SCOREKEEPER else none
     } %}
-    <a class="game-card magnet" href="{{ url_for('game_detail', game_id=game.id) }}" data-game="{{ payload | tojson | forceescape }}">
+    <a class="game-card magnet" href="{{ payload.href }}" data-game="{{ payload | tojson | forceescape }}">
       <div class="gc-top">
         <span>{{ game.game_date | md }} · {{ game.game_date | weekday }}</span>
         {% if game.status == 'live' %}
@@ -134,13 +137,13 @@
             <tr>
               <td class="rank-cell">{{ '%02d' | format(loop.index) }}</td>
               <td>
-                <a class="team-cell text-reset text-decoration-none" href="{{ url_for('team_detail', team_id=row.id) }}">
+                {% if current_user.role != ROLE_SCOREKEEPER %}<a class="team-cell text-reset text-decoration-none" href="{{ url_for('team_detail', team_id=row.id) }}">{% else %}<span class="team-cell">{% endif %}
                   {{ ui.team_badge(row.abbreviation) }}
                   <span class="min-w-0">
                     <span class="name d-block">{{ row.name }}</span>
                     <span class="sub">{{ row.city }}</span>
                   </span>
-                </a>
+                {% if current_user.role != ROLE_SCOREKEEPER %}</a>{% else %}</span>{% endif %}
               </td>
               <td class="num text-end">{{ row.games_played }}</td>
               <td class="num text-end">{{ row.wins }}</td>

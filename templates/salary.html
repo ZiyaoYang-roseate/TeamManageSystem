@@ -106,7 +106,7 @@
 
 <section class="panel">
   {% call ui.panel_head('有效合同与到期安排', '按首年薪资排序，含球队/球员选项。') %}
-  <a class="chip" href="{{ url_for('league_dashboard') if current_user.role == ROLE_LEAGUE_ADMIN else url_for('my_team') }}">回到球队</a>
+  <a class="chip" href="{{ url_for('my_team', season=season) }}">回到球队</a>
   {% endcall %}
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">

@@ -40,36 +40,5 @@ def management_team_id():
 
 
 def planning_team_id():
-    """Team whose planning workspace (salary / draft board) should be shown.
-
-    Managers always land on their own team in edit mode. League admins have no
-    team of their own, so they get a read-only inspection view of any team,
-    picked with ``?team_id=`` and defaulting to the lowest team id.
-    """
-    user = getattr(g, "user", None)
-    if not user:
-        abort(403)
-    if user["role"] == ROLE_MANAGEMENT and user["team_id"] is not None:
-        g.planning_readonly = False
-        return int(user["team_id"])
-    if user["role"] != ROLE_LEAGUE_ADMIN:
-        abort(403)
-
-    from db import fetch_all
-
-    g.planning_readonly = True
-    rows = fetch_all("SELECT id FROM teams ORDER BY id")
-    known = [int(row["id"]) for row in rows]
-    if not known:
-        abort(403)
-    wanted = request.args.get("team_id", type=int)
-    return wanted if wanted in known else known[0]
-
-
-def planning_teams():
-    """Selectable teams for the league-admin inspection view."""
-    from db import fetch_all
-
-    return fetch_all(
-        "SELECT id, city, name, abbreviation FROM teams ORDER BY city, name"
-    )
+    """Private salary plans and draft boards belong only to the logged-in team."""
+    return management_team_id()
